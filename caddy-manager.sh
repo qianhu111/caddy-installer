@@ -103,7 +103,7 @@ check_domain() {
 }
 
 # -------------------
-# 安装 Caddy
+# 安装 Caddy（强制最新版）
 # -------------------
 install_caddy() {
     info "开始安装并配置 Caddy"
@@ -140,20 +140,14 @@ install_caddy() {
         exit 1
     fi
 
-    # 安装 Caddy
+    # 安装最新 Caddy
     case "$OS" in
         debian|ubuntu)
-            info "使用官方 apt 仓库安装 Caddy"
-            sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg || true
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-                | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-                | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-            sudo apt update
-            sudo apt install -y caddy
+            info "使用官方安装脚本安装最新版 Caddy"
+            curl -1sLf 'https://getcaddy.com' | bash
             ;;
         centos|rhel|fedora)
-            info "使用官方 yum/dnf 仓库安装 Caddy"
+            info "使用官方 yum/dnf 安装最新版 Caddy"
             sudo dnf install -y 'dnf-command(config-manager)' || sudo yum install -y yum-utils
             sudo dnf config-manager --add-repo https://dl.cloudsmith.io/public/caddy/stable/rpm.repo || sudo yum-config-manager --add-repo https://dl.cloudsmith.io/public/caddy/stable/rpm.repo
             sudo dnf install -y caddy || sudo yum install -y caddy
@@ -219,10 +213,11 @@ install_caddy() {
     sudo systemctl restart caddy
     info "Caddy 已启动并设置为开机自启"
 
-    # 检查证书状态
+    # 检查证书状态（新版兼容）
     sleep 5
-    CERT_PATH="$(sudo caddy list-certificates | grep "$DOMAIN" | awk '{print $1}')"
-    if [ -n "$CERT_PATH" ]; then
+    CERT_CHECK=$(sudo caddy list certs 2>/dev/null | grep "$DOMAIN" || true)
+    if [ -n "$CERT_CHECK" ]; then
+        CERT_PATH=$(echo "$CERT_CHECK" | awk '{print $1}')
         info "证书已生成，路径: $CERT_PATH"
     else
         warn "证书未找到，请检查 Caddy 存储目录或网络/端口问题"
