@@ -91,7 +91,7 @@ install_caddy() {
     read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
-    read -rp "请输入 Cloudflare API Token (可留空使用 HTTP-01): " CF_TOKEN
+    read -rp "请输入 Cloudflare API Token (可留空使用 HTTP/DNS 验证): " CF_TOKEN
     read -rp "是否使用 Let’s Encrypt 测试环境 (避免限额, y/n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
@@ -112,12 +112,15 @@ install_caddy() {
     sudo apt update
     sudo apt install -y caddy || { error "Caddy 安装失败"; exit 1; }
 
-    # 写 Caddyfile
+    # 创建目录权限
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
     sudo chown -R root:www-data /etc/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
+    # -------------------
+    # 生成 Caddyfile
+    # -------------------
     CADDYFILE="${DOMAIN} {
     encode gzip
     reverse_proxy ${UPSTREAM} {
@@ -125,6 +128,7 @@ install_caddy() {
         header_up X-Forwarded-Port {server_port}
     }"
 
+    # 优先 DNS-01
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证"
         export CF_API_TOKEN="$CF_TOKEN"
@@ -137,6 +141,7 @@ install_caddy() {
         fi
         CADDYFILE+="
     }"
+    # HTTP-01
     elif [ $HTTP_FREE -eq 1 ]; then
         info "使用 HTTP-01 验证"
         if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -147,6 +152,21 @@ install_caddy() {
         else
             CADDYFILE+="
     tls ${EMAIL}"
+        fi
+    # TLS-ALPN-01
+    elif [ $HTTPS_FREE -eq 1 ]; then
+        info "使用 TLS-ALPN-01 验证"
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            CADDYFILE+="
+    tls {
+        alpn tls-alpn-01
+        ca https://acme-staging-v02.api.letsencrypt.org/directory
+    }"
+        else
+            CADDYFILE+="
+    tls ${EMAIL} {
+        alpn tls-alpn-01
+    }"
         fi
     else
         error "端口被占用且未提供 CF Token，无法申请证书"
