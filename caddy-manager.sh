@@ -56,14 +56,11 @@ install_dependencies() {
 # 端口检测
 # -------------------
 check_ports() {
-    local conflict=0
     for port in 80 443; do
         if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
             warn "端口 $port 已被占用"
-            conflict=1
         fi
     done
-    return $conflict
 }
 
 # -------------------
@@ -88,7 +85,6 @@ check_domain() {
 install_caddy() {
     info "开始安装并配置 Caddy"
 
-    # 用户输入
     read -rp "请输入要绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
@@ -101,10 +97,9 @@ install_caddy() {
     echo "邮箱: $EMAIL"
     echo "后端: $UPSTREAM"
 
-    # 域名解析
     check_domain "$DOMAIN"
+    check_ports
 
-    # 检查端口占用
     HTTP_FREE=1; HTTPS_FREE=1
     for port in 80 443; do
         if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
@@ -148,27 +143,71 @@ install_caddy() {
     elif [ $HTTPS_FREE -eq 1 ]; then
         info "使用 TLS-ALPN-01 验证"
         CADDYFILE+="
-    tls ${EMAIL} {
-        alpn tls
-    }"
+    tls ${EMAIL} { alpn tls }"
     else
         info "使用 DNS-01 验证"
         CADDYFILE+="
-    tls {
-        dns cloudflare ${CF_TOKEN}
-        email ${EMAIL}
-    }"
+    tls { dns cloudflare ${CF_TOKEN} email ${EMAIL} }"
     fi
-
     CADDYFILE+="
 }"
 
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
-
-    # 验证并启动
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
     sudo systemctl enable --now caddy
     info "Caddy 已启动并设置开机自启"
+}
+
+# -------------------
+# 服务管理
+# -------------------
+manage_caddy() {
+    echo -e "\n==============================="
+    echo "          Caddy 服务管理        "
+    echo "==============================="
+    echo "1) 启动 Caddy"
+    echo "2) 停止 Caddy"
+    echo "3) 重启 Caddy"
+    echo "4) 查看实时日志"
+    echo "5) 查看证书状态"
+    read -rp "请选择操作: " choice
+    case $choice in
+        1) sudo systemctl start caddy && info "Caddy 已启动";;
+        2) sudo systemctl stop caddy && info "Caddy 已停止";;
+        3) sudo systemctl restart caddy && info "Caddy 已重启";;
+        4) sudo journalctl -u caddy -f;;
+        5)
+            read -rp "请输入域名: " dom
+            CERT_PATH="/etc/ssl/caddy/acme/acme-v02.api.letsencrypt.org/sites/${dom}"
+            if [ -d "$CERT_PATH" ]; then
+                info "证书路径: $CERT_PATH"
+                ls -l "$CERT_PATH"
+            else
+                warn "证书未找到"
+            fi
+            ;;
+        *) warn "无效选择";;
+    esac
+}
+
+# -------------------
+# 卸载功能
+# -------------------
+uninstall_caddy() {
+    echo -e "\n==============================="
+    echo "        卸载 Caddy 并清理       "
+    echo "==============================="
+    read -rp "确认卸载 Caddy 吗？(y/n): " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || return
+
+    sudo systemctl stop caddy || true
+    sudo systemctl disable caddy || true
+    sudo rm -f /etc/systemd/system/caddy.service
+    sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
+    sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    sudo apt remove --purge -y caddy || true
+    sudo systemctl daemon-reload
+    info "Caddy 已彻底卸载"
 }
 
 # -------------------
@@ -180,23 +219,16 @@ while true; do
     echo "==============================="
     echo "1) 安装并配置 Caddy"
     echo "2) 检查 Caddy 状态"
-    echo "3) 卸载 Caddy"
-    echo "4) 退出"
+    echo "3) 管理 Caddy 服务"
+    echo "4) 卸载 Caddy"
+    echo "5) 退出"
     read -rp "请选择操作: " choice
     case $choice in
         1) detect_os; install_dependencies; install_caddy ;;
         2) systemctl status caddy --no-pager || warn "Caddy 未运行" ;;
-        3)
-            read -rp "确认卸载 Caddy 吗？(y/n): " c
-            [[ "$c" =~ ^[Yy]$ ]] || continue
-            sudo systemctl stop caddy || true
-            sudo systemctl disable caddy || true
-            sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
-            sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-            sudo systemctl daemon-reload
-            info "Caddy 已卸载"
-            ;;
-        4) exit 0 ;;
-        *) warn "无效选择" ;;
+        3) manage_caddy ;;
+        4) detect_os; uninstall_caddy ;;
+        5) exit 0 ;;
+        *) warn "无效选择";;
     esac
 done
