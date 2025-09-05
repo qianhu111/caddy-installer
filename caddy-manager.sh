@@ -28,7 +28,7 @@ detect_os() {
 }
 
 install_dependencies() {
-    local deps=(curl sudo lsof host gnupg tar)
+    local deps=(curl sudo lsof host gnupg)
     local to_install=()
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
@@ -103,7 +103,7 @@ check_domain() {
 }
 
 # -------------------
-# 安装 Caddy
+# 安装最新版 Caddy
 # -------------------
 install_caddy() {
     info "开始安装并配置 Caddy"
@@ -124,7 +124,7 @@ install_caddy() {
     # 检查域名解析
     check_domain "$DOMAIN"
 
-    # 检查端口
+    # 检查端口占用
     HTTP_PORT_FREE=1
     HTTPS_PORT_FREE=1
     for port in 80 443; do
@@ -136,16 +136,18 @@ install_caddy() {
     done
 
     if [ $HTTP_PORT_FREE -eq 0 ] && [ $HTTPS_PORT_FREE -eq 0 ] && [ -z "$CF_TOKEN" ]; then
-        error "80/443端口被占用且未提供 Cloudflare API Token，无法申请证书"
+        error "80/443端口都被占用且未提供 Cloudflare API Token，无法申请证书"
         exit 1
     fi
 
-    # 安装最新版 Caddy 官方脚本
+    # 安装 Caddy 最新版
     info "安装最新版 Caddy"
-    curl -1sLf 'https://dl.caddyserver.com/install.sh' | bash
+    curl -1sLf 'https://dl.caddyserver.com/install.sh' | sudo bash
 
-    if ! command -v caddy >/dev/null 2>&1; then
-        error "Caddy 安装失败，命令未找到"
+    # 检查 caddy 路径
+    CADDY_BIN=$(command -v caddy || true)
+    if [ -z "$CADDY_BIN" ]; then
+        error "Caddy 安装失败，未找到 caddy 可执行文件"
         exit 1
     fi
 
@@ -190,15 +192,21 @@ install_caddy() {
     echo "$CADDYFILE_CONTENT" | sudo tee /etc/caddy/Caddyfile >/dev/null
 
     # 验证 Caddyfile
-    if ! sudo caddy validate --config /etc/caddy/Caddyfile; then
-        warn "Caddyfile 语法错误，请检查配置"
-        exit 1
-    fi
+    sudo "$CADDY_BIN" validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 验证失败"; exit 1; }
 
-    # 启动 Caddy
+    # 启动服务
     sudo systemctl enable caddy
     sudo systemctl restart caddy
     info "Caddy 已启动并设置为开机自启"
+
+    # 检查证书状态
+    sleep 5
+    CERT_PATH=$(sudo "$CADDY_BIN" list-modules | grep -i cert || true)
+    if [ -n "$CERT_PATH" ]; then
+        info "证书已生成"
+    else
+        warn "证书未找到，请检查网络或端口"
+    fi
 
     info "如需查看服务状态：sudo systemctl status caddy.service"
     info "如需查看启动日志：sudo journalctl -xeu caddy.service"
@@ -264,7 +272,7 @@ uninstall_caddy() {
     sudo systemctl disable caddy || true
     sudo rm -f /etc/systemd/system/caddy.service
     sudo rm -rf /etc/caddy /etc/ssl/caddy
-    sudo rm -f /usr/local/bin/caddy
+    sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
     sudo systemctl daemon-reload
 
     case "$OS" in
