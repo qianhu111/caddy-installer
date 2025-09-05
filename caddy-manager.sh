@@ -68,17 +68,21 @@ install_dependencies() {
 # 检测端口占用
 # -------------------
 check_ports() {
-    local conflict=0
-    for port in 80 443; do
-        local pid
-        pid=$(sudo lsof -t -i :"$port" || true)
-        if [ -n "$pid" ]; then
-            warn "端口 $port 已被占用，进程 ID: $pid"
-            conflict=1
-        fi
-    done
-    return $conflict
+  local conflict=0
+  for port in 80 443; do
+    if sudo lsof -i :"$port" >/dev/null 2>&1; then
+      warn "端口 $port 已被占用，Caddy 可能无法启动"
+      conflict=1
+      sudo lsof -i :"$port"
+    fi
+  done
+  return $conflict
 }
+
+if check_ports; then
+  read -rp "端口冲突可能导致启动失败，是否继续安装？(y/n): " port_choice
+  [[ "$port_choice" =~ ^[Yy]$ ]] || { info "安装已取消"; exit 1; }
+fi
 
 # -------------------
 # 检查域名解析
