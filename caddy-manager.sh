@@ -58,12 +58,12 @@ check_domain() {
 
   local ip
   ip=$(curl -s ifconfig.me)
-  if host "$domain" | grep -q "$ip"; then
-    info "域名 $domain 已正确解析到当前服务器 IP ($ip)"
-  else
+  if ! host "$domain" | grep -q "$ip"; then
     warn "域名 $domain 没有解析到当前服务器 IP ($ip)，HTTPS 可能无法申请"
     read -rp "是否继续安装？(y/n): " choice
     [[ "$choice" =~ ^[Yy]$ ]] || { info "安装已取消"; exit 1; }
+  else
+    info "域名 $domain 已正确解析到当前服务器 IP ($ip)"
   fi
 }
 
