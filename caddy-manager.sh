@@ -91,7 +91,7 @@ install_caddy() {
     read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
-    read -rp "请输入 Cloudflare API Token (可留空手动 HTTP-01): " CF_TOKEN
+    read -rp "请输入 Cloudflare API Token (可留空使用 HTTP-01): " CF_TOKEN
     read -rp "是否使用 Let’s Encrypt 测试环境 (避免限额, y/n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
