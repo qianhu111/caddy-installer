@@ -58,7 +58,7 @@ check_domain() {
 
   local ip
   ip=$(curl -s ifconfig.me)
-  if ! host "$domain" | grep -q "$ip"; then
+  if host "$domain" | grep -q "$ip"; then
     info "域名 $domain 已正确解析到当前服务器 IP ($ip)"
   else
     warn "域名 $domain 没有解析到当前服务器 IP ($ip)，HTTPS 可能无法申请"
