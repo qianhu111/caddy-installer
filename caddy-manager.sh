@@ -126,19 +126,15 @@ install_caddy() {
         header_up X-Forwarded-Proto {scheme}
     }"
 
-    if [ $HTTP_FREE -eq 1 ]; then
-        info "使用 HTTP-01 验证"
-        CADDYFILE+="
-    tls ${EMAIL}"
-    elif [ $HTTPS_FREE -eq 1 ]; then
-        info "使用 TLS-ALPN-01 验证"
-        CADDYFILE+="
-    tls ${EMAIL} { alpn tls }"
-    elif [[ -n "$CF_TOKEN" ]]; then
+    if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证"
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
     tls { dns cloudflare email ${EMAIL} }"
+    elif [ $HTTP_FREE -eq 1 ]; then
+        info "使用 HTTP-01 验证"
+        CADDYFILE+="
+    tls ${EMAIL}"
     else
         error "端口被占用且未提供 CF Token，无法申请证书"
         exit 1
@@ -154,6 +150,15 @@ install_caddy() {
     # 等待证书生成
     info "等待 30 秒以生成证书..."
     sleep 30
+
+    # 显示证书路径
+    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+    if [ -d "$CERT_DIR" ]; then
+        info "证书文件列表:"
+        find "$CERT_DIR" -type f \( -name "${DOMAIN}*.crt" -o -name "${DOMAIN}*.key" \)
+    else
+        warn "证书目录不存在: $CERT_DIR"
+    fi
 }
 
 # -------------------
