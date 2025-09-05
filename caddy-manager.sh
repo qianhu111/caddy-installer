@@ -188,11 +188,11 @@ EOF
     info "Caddy 已启动并设置为开机自启"
 
     # 检查证书状态
-    CERT_PATH="/etc/ssl/caddy/acme/acme-v02.api.letsencrypt.org/sites/${DOMAIN}"
-    if [ -d "$CERT_PATH" ]; then
-        info "证书申请成功，路径: $CERT_PATH"
+    CERT_PATH="$(sudo caddy list-certificates | grep "$DOMAIN" | awk '{print $1}')"
+    if [ -n "$CERT_PATH" ]; then
+        info "证书已生成，路径: $CERT_PATH"
     else
-        warn "证书未生成，请稍等或手动检查"
+        warn "证书未找到，请检查 Caddy 存储目录"
     fi
 
     info "如需查看服务状态：sudo systemctl status caddy.service"
