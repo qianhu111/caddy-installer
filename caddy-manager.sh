@@ -92,7 +92,7 @@ install_caddy() {
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
     read -rp "请输入 Cloudflare API Token (可留空手动 HTTP-01): " CF_TOKEN
-    read -rp "是否启用测试模式 (使用 Let’s Encrypt Staging 环境)? (y/n): " TEST_MODE
+    read -rp "是否使用 Let’s Encrypt 测试环境 (避免限额, y/n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
@@ -100,7 +100,6 @@ install_caddy() {
     echo "域名: $DOMAIN"
     echo "邮箱: $EMAIL"
     echo "后端: $UPSTREAM"
-    [[ "$TEST_MODE" =~ ^[Yy]$ ]] && echo "模式: 测试 (staging)" || echo "模式: 正式"
 
     check_domain "$DOMAIN"
     check_ports
@@ -123,9 +122,7 @@ install_caddy() {
     encode gzip
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Port {server_port}
-        header_up X-Forwarded-Proto {scheme}
     }"
 
     if [[ -n "$CF_TOKEN" ]]; then
@@ -133,21 +130,24 @@ install_caddy() {
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
     tls {
-        dns cloudflare {env.CF_API_TOKEN}
-        email ${EMAIL}"
-        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+        dns cloudflare {env.CF_API_TOKEN}"
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            CADDYFILE+="
         ca https://acme-staging-v02.api.letsencrypt.org/directory"
+        fi
         CADDYFILE+="
     }"
     elif [ $HTTP_FREE -eq 1 ]; then
         info "使用 HTTP-01 验证"
-        CADDYFILE+="
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            CADDYFILE+="
     tls {
-        email ${EMAIL}"
-        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
-        ca https://acme-staging-v02.api.letsencrypt.org/directory"
-        CADDYFILE+="
+        ca https://acme-staging-v02.api.letsencrypt.org/directory
     }"
+        else
+            CADDYFILE+="
+    tls ${EMAIL}"
+        fi
     else
         error "端口被占用且未提供 CF Token，无法申请证书"
         exit 1
