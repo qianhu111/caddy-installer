@@ -110,7 +110,8 @@ install_caddy() {
     # 用户输入
     read -rp "请输入要绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
-    read -rp "请输入反向代理目标地址 (例如 localhost:8888): " UPSTREAM
+    read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
+    read -rp "请输入 Cloudflare API Token (可留空手动 DNS-01): " CF_TOKEN
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
@@ -163,7 +164,26 @@ install_caddy() {
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
-    sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+    if [ -n "$CF_TOKEN" ]; then
+        # DNS-01 Cloudflare 自动证书
+        sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+${DOMAIN} {
+    encode gzip
+    reverse_proxy ${UPSTREAM} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Port {server_port}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    tls {
+        dns cloudflare ${CF_TOKEN}
+        email ${EMAIL}
+    }
+}
+EOF
+    else
+        # HTTP-01 (默认80/443)
+        sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
 ${DOMAIN} {
     encode gzip
     reverse_proxy ${UPSTREAM} {
@@ -175,6 +195,7 @@ ${DOMAIN} {
     tls ${EMAIL}
 }
 EOF
+    fi
 
     # 验证 Caddyfile 语法
     if ! sudo caddy validate --config /etc/caddy/Caddyfile; then
@@ -188,11 +209,12 @@ EOF
     info "Caddy 已启动并设置为开机自启"
 
     # 检查证书状态
+    sleep 5
     CERT_PATH="$(sudo caddy list-certificates | grep "$DOMAIN" | awk '{print $1}')"
     if [ -n "$CERT_PATH" ]; then
         info "证书已生成，路径: $CERT_PATH"
     else
-        warn "证书未找到，请检查 Caddy 存储目录"
+        warn "证书未找到，请检查 Caddy 存储目录或网络/端口问题"
     fi
 
     info "如需查看服务状态：sudo systemctl status caddy.service"
