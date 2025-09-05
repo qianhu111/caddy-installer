@@ -91,7 +91,8 @@ install_caddy() {
     read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
-    read -rp "请输入 Cloudflare API Token (可留空手动 DNS-01): " CF_TOKEN
+    read -rp "请输入 Cloudflare API Token (可留空手动 HTTP-01): " CF_TOKEN
+    read -rp "是否启用测试模式 (使用 Let’s Encrypt Staging 环境)? (y/n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
@@ -99,6 +100,7 @@ install_caddy() {
     echo "域名: $DOMAIN"
     echo "邮箱: $EMAIL"
     echo "后端: $UPSTREAM"
+    [[ "$TEST_MODE" =~ ^[Yy]$ ]] && echo "模式: 测试 (staging)" || echo "模式: 正式"
 
     check_domain "$DOMAIN"
     check_ports
@@ -130,11 +132,22 @@ install_caddy() {
         info "使用 DNS-01 验证"
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
-    tls { dns cloudflare email ${EMAIL} }"
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+        email ${EMAIL}"
+        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+        ca https://acme-staging-v02.api.letsencrypt.org/directory"
+        CADDYFILE+="
+    }"
     elif [ $HTTP_FREE -eq 1 ]; then
         info "使用 HTTP-01 验证"
         CADDYFILE+="
-    tls ${EMAIL}"
+    tls {
+        email ${EMAIL}"
+        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+        ca https://acme-staging-v02.api.letsencrypt.org/directory"
+        CADDYFILE+="
+    }"
     else
         error "端口被占用且未提供 CF Token，无法申请证书"
         exit 1
@@ -152,7 +165,7 @@ install_caddy() {
     sleep 30
 
     # 显示证书路径
-    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates"
     if [ -d "$CERT_DIR" ]; then
         info "证书文件列表:"
         find "$CERT_DIR" -type f \( -name "${DOMAIN}*.crt" -o -name "${DOMAIN}*.key" \)
@@ -181,7 +194,7 @@ manage_caddy() {
         4) sudo journalctl -u caddy -f;;
         5)
             read -rp "请输入域名: " dom
-            CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+            CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates"
             if [ -d "$CERT_DIR" ]; then
                 find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
             else
