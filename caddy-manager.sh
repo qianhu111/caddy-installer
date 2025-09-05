@@ -90,9 +90,11 @@ install_caddy() {
 
   # 检查端口占用
   if check_ports; then
-    read -rp "端口冲突可能导致启动失败，是否继续安装？(y/n): " port_choice
-    [[ "$port_choice" =~ ^[Yy]$ ]] || { info "安装已取消"; exit 1; }
-  fi
+  :
+else
+  read -rp "端口冲突可能导致启动失败，是否继续安装？(y/n): " port_choice
+  [[ "$port_choice" =~ ^[Yy]$ ]] || { info "安装已取消"; exit 1; }
+fi
 
   # 安装 Caddy
   if command -v apt >/dev/null 2>&1; then
