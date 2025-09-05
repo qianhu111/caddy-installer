@@ -70,10 +70,11 @@ install_dependencies() {
 check_ports() {
     local conflict=0
     for port in 80 443; do
-        local pid
-        pid=$(sudo lsof -t -i :"$port" || true)
-        if [ -n "$pid" ]; then
-            warn "端口 $port 已被占用，进程 ID: $pid"
+        local info
+        info=$(sudo lsof -i :"$port" -Pn -sTCP:LISTEN 2>/dev/null)
+        if [ -n "$info" ]; then
+            warn "端口 $port 已被占用，以下进程正在监听："
+            echo "$info" | awk 'NR>1 {print "  PID="$2", 用户="$3", 命令="$1}'
             conflict=1
         fi
     done
