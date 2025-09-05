@@ -30,11 +30,25 @@ CADDY_BIN=$(command -v caddy || echo "/usr/local/bin/caddy")
 CADDY_SERVICE="/etc/systemd/system/caddy.service"
 
 # -------------------
+# 检测域名解析
+# -------------------
+check_domain() {
+  local domain="$1"
+  local ip
+  ip=$(curl -s ifconfig.me)
+  if ! host "$domain" | grep -q "$ip"; then
+    warn "域名 $domain 没有解析到当前服务器 IP ($ip)，HTTPS 可能无法申请"
+  else
+    info "域名 $domain 已正确解析到当前服务器 IP ($ip)"
+  fi
+}
+
+# -------------------
 # 安装 Caddy
 # -------------------
 install_caddy() {
   info "安装并配置 Caddy"
-  
+
   read -rp "请输入要绑定的域名: " DOMAIN
   read -rp "请输入用于申请证书的邮箱: " EMAIL
   read -rp "请输入反向代理目标地址 (例如 localhost:8888): " UPSTREAM
@@ -48,15 +62,52 @@ install_caddy() {
   read -rp "确认继续安装吗？(y/n): " CONFIRM
   [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
+  # -------------------
   # 安装 Caddy
-  if ! command -v caddy >/dev/null 2>&1; then
-    info "下载并安装 Caddy..."
-    curl -fsSL https://getcaddy.com | bash -s personal || { error "Caddy 安装失败"; exit 1; }
+  # -------------------
+  if command -v apt >/dev/null 2>&1; then
+    info "检测到 apt，使用官方仓库安装 Caddy"
+    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+      | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+      | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+    sudo apt update
+    sudo apt install -y caddy
   else
-    warn "Caddy 已安装，跳过安装"
+    info "未检测到 apt，使用官方二进制安装 Caddy"
+    curl -fsSL "https://github.com/caddyserver/caddy/releases/latest/download/caddy_$(uname -s)_$(uname -m).tar.gz" -o caddy.tar.gz
+    tar -xzf caddy.tar.gz
+    sudo mv caddy /usr/local/bin/
+    sudo chmod +x /usr/local/bin/caddy
+    rm -f caddy.tar.gz
+
+    # 创建 systemd 服务
+    sudo tee "$CADDY_SERVICE" > /dev/null <<EOF
+[Unit]
+Description=Caddy
+Documentation=https://caddyserver.com/docs/
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+Restart=on-failure
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable caddy
   fi
 
+  # -------------------
   # 配置目录
+  # -------------------
   sudo mkdir -p /etc/caddy /etc/ssl/caddy
   sudo touch /etc/caddy/Caddyfile
   sudo chown -R root:www-data /etc/caddy
@@ -74,15 +125,11 @@ ${DOMAIN} {
 }
 EOF
 
-  # 配置 systemd
-  info "配置 systemd 服务"
-  sudo curl -fsSL https://raw.githubusercontent.com/mholt/caddy/master/dist/init/linux-systemd/caddy.service \
-       -o "$CADDY_SERVICE"
-  sudo systemctl daemon-reload
-  sudo systemctl enable caddy.service
-
-  sudo systemctl restart caddy.service
+  sudo systemctl restart caddy
   info "Caddy 已启动并设置为开机自启"
+
+  # 检查域名解析
+  check_domain "$DOMAIN"
 }
 
 # -------------------
