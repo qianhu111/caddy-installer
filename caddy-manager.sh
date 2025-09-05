@@ -56,9 +56,12 @@ install_dependencies() {
 # 端口检测
 # -------------------
 check_ports() {
+    HTTP_FREE=1; HTTPS_FREE=1
     for port in 80 443; do
         if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
             warn "端口 $port 已被占用"
+            [ $port -eq 80 ] && HTTP_FREE=0
+            [ $port -eq 443 ] && HTTPS_FREE=0
         fi
     done
 }
@@ -80,12 +83,12 @@ check_domain() {
 }
 
 # -------------------
-# 安装最新版 Caddy
+# 安装 Caddy
 # -------------------
 install_caddy() {
     info "开始安装并配置 Caddy"
 
-    read -rp "请输入要绑定的域名: " DOMAIN
+    read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
     read -rp "请输入 Cloudflare API Token (可留空手动 DNS-01): " CF_TOKEN
@@ -100,28 +103,15 @@ install_caddy() {
     check_domain "$DOMAIN"
     check_ports
 
-    HTTP_FREE=1; HTTPS_FREE=1
-    for port in 80 443; do
-        if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
-            [ $port -eq 80 ] && HTTP_FREE=0
-            [ $port -eq 443 ] && HTTPS_FREE=0
-        fi
-    done
-
-    if [ $HTTP_FREE -eq 0 ] && [ $HTTPS_FREE -eq 0 ] && [ -z "$CF_TOKEN" ]; then
-        error "80/443端口都被占用且未提供 Cloudflare Token，无法申请证书"
-        exit 1
-    fi
-
-    # 安装 Caddy via 官方 apt 源
-    info "使用官方 apt 源安装 Caddy"
+    # 安装官方 apt 源 Caddy
+    info "安装最新版 Caddy"
     sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg || true
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
     sudo apt update
     sudo apt install -y caddy || { error "Caddy 安装失败"; exit 1; }
 
-    # 生成 Caddyfile
+    # 写 Caddyfile
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
     sudo chown -R root:www-data /etc/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
@@ -144,10 +134,14 @@ install_caddy() {
         info "使用 TLS-ALPN-01 验证"
         CADDYFILE+="
     tls ${EMAIL} { alpn tls }"
-    else
+    elif [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证"
+        export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
-    tls { dns cloudflare ${CF_TOKEN} email ${EMAIL} }"
+    tls { dns cloudflare email ${EMAIL} }"
+    else
+        error "端口被占用且未提供 CF Token，无法申请证书"
+        exit 1
     fi
     CADDYFILE+="
 }"
@@ -155,7 +149,15 @@ install_caddy() {
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
     sudo systemctl enable --now caddy
-    info "Caddy 已启动并设置开机自启"
+    info "Caddy 已启动并开机自启"
+
+    sleep 5
+    CERT_PATH=$(sudo caddy list-certificates | grep "$DOMAIN" | awk '{print $1}')
+    if [ -n "$CERT_PATH" ]; then
+        info "证书已生成，路径: $CERT_PATH"
+    else
+        warn "证书未找到，请检查端口或 DNS 设置"
+    fi
 }
 
 # -------------------
@@ -178,8 +180,8 @@ manage_caddy() {
         4) sudo journalctl -u caddy -f;;
         5)
             read -rp "请输入域名: " dom
-            CERT_PATH="/etc/ssl/caddy/acme/acme-v02.api.letsencrypt.org/sites/${dom}"
-            if [ -d "$CERT_PATH" ]; then
+            CERT_PATH=$(sudo caddy list-certificates | grep "$dom" | awk '{print $1}')
+            if [ -n "$CERT_PATH" ]; then
                 info "证书路径: $CERT_PATH"
                 ls -l "$CERT_PATH"
             else
@@ -191,7 +193,7 @@ manage_caddy() {
 }
 
 # -------------------
-# 卸载功能
+# 卸载 Caddy
 # -------------------
 uninstall_caddy() {
     echo -e "\n==============================="
