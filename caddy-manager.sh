@@ -151,13 +151,9 @@ install_caddy() {
     sudo systemctl enable --now caddy
     info "Caddy 已启动并开机自启"
 
-    sleep 5
-    CERT_PATH=$(sudo caddy list-certificates | grep "$DOMAIN" | awk '{print $1}')
-    if [ -n "$CERT_PATH" ]; then
-        info "证书已生成，路径: $CERT_PATH"
-    else
-        warn "证书未找到，请检查端口或 DNS 设置"
-    fi
+    # 等待证书生成
+    info "等待 30 秒以生成证书..."
+    sleep 30
 }
 
 # -------------------
@@ -171,7 +167,7 @@ manage_caddy() {
     echo "2) 停止 Caddy"
     echo "3) 重启 Caddy"
     echo "4) 查看实时日志"
-    echo "5) 查看证书状态"
+    echo "5) 查看证书文件"
     read -rp "请选择操作: " choice
     case $choice in
         1) sudo systemctl start caddy && info "Caddy 已启动";;
@@ -180,12 +176,11 @@ manage_caddy() {
         4) sudo journalctl -u caddy -f;;
         5)
             read -rp "请输入域名: " dom
-            CERT_PATH=$(sudo caddy list-certificates | grep "$dom" | awk '{print $1}')
-            if [ -n "$CERT_PATH" ]; then
-                info "证书路径: $CERT_PATH"
-                ls -l "$CERT_PATH"
+            CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+            if [ -d "$CERT_DIR" ]; then
+                find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
             else
-                warn "证书未找到"
+                warn "证书目录不存在: $CERT_DIR"
             fi
             ;;
         *) warn "无效选择";;
