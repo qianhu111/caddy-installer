@@ -125,9 +125,19 @@ install_caddy() {
     check_domain "$DOMAIN"
 
     # 检查端口占用
-    if check_ports; then
-        read -rp "端口冲突可能导致启动失败，是否继续安装？(y/n): " port_choice
-        [[ "$port_choice" =~ ^[Yy]$ ]] || { info "安装已取消"; exit 1; }
+    HTTP_PORT_FREE=1
+    HTTPS_PORT_FREE=1
+    for port in 80 443; do
+        if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
+            warn "端口 $port 已被占用"
+            [ $port -eq 80 ] && HTTP_PORT_FREE=0
+            [ $port -eq 443 ] && HTTPS_PORT_FREE=0
+        fi
+    done
+
+    if [ $HTTP_PORT_FREE -eq 0 ] && [ $HTTPS_PORT_FREE -eq 0 ] && [ -z "$CF_TOKEN" ]; then
+        error "80/443端口都被占用且未提供 Cloudflare API Token，无法申请证书"
+        exit 1
     fi
 
     # 安装 Caddy
@@ -160,45 +170,45 @@ install_caddy() {
 
     # 写入 Caddyfile
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
-    sudo touch /etc/caddy/Caddyfile
     sudo chown -R root:www-data /etc/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
-    if [ -n "$CF_TOKEN" ]; then
-        # DNS-01 Cloudflare 自动证书
-        sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-${DOMAIN} {
+    CADDYFILE_CONTENT="${DOMAIN} {
     encode gzip
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Port {server_port}
         header_up X-Forwarded-Proto {scheme}
-    }
+    }"
+
+    # 自动选择验证方式
+    if [ $HTTP_PORT_FREE -eq 1 ]; then
+        info "使用 HTTP-01 验证"
+        CADDYFILE_CONTENT+="
+    tls ${EMAIL}"
+    elif [ $HTTPS_PORT_FREE -eq 1 ]; then
+        info "使用 TLS-ALPN-01 验证"
+        CADDYFILE_CONTENT+="
+    tls ${EMAIL} {
+        alpn tls
+    }"
+    else
+        info "使用 DNS-01 验证"
+        CADDYFILE_CONTENT+="
     tls {
         dns cloudflare ${CF_TOKEN}
         email ${EMAIL}
-    }
-}
-EOF
-    else
-        # HTTP-01 (默认80/443)
-        sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-${DOMAIN} {
-    encode gzip
-    reverse_proxy ${UPSTREAM} {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Port {server_port}
-        header_up X-Forwarded-Proto {scheme}
-    }
-    tls ${EMAIL}
-}
-EOF
+    }"
     fi
 
-    # 验证 Caddyfile 语法
+    CADDYFILE_CONTENT+="
+}"
+
+    echo "$CADDYFILE_CONTENT" | sudo tee /etc/caddy/Caddyfile >/dev/null
+
+    # 验证 Caddyfile
     if ! sudo caddy validate --config /etc/caddy/Caddyfile; then
         warn "Caddyfile 语法错误，请检查配置"
         exit 1
