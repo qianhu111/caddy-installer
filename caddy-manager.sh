@@ -9,12 +9,12 @@ YELLOW="\033[1;33m"
 RED="\033[1;31m"
 RESET="\033[0m"
 
-info() { echo -e "${GREEN}[INFO]${RESET} $*"; }
-warn() { echo -e "${YELLOW}[WARN]${RESET} $*"; }
+info()  { echo -e "${GREEN}[INFO]${RESET} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${RESET} $*"; }
 error() { echo -e "${RED}[ERROR]${RESET} $*"; }
 
 # -------------------
-# 系统识别 & 安装依赖
+# 系统识别 & 依赖安装
 # -------------------
 detect_os() {
     if [[ -f /etc/os-release ]]; then
@@ -28,39 +28,32 @@ detect_os() {
 }
 
 install_dependencies() {
-    local deps=(curl sudo lsof host)
+    local deps=(curl sudo lsof host gnupg apt-transport-https)
     local to_install=()
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
             to_install+=("$dep")
         fi
     done
-    if [ ${#to_install[@]} -eq 0 ]; then
+    if [ ${#to_install[@]} -gt 0 ]; then
+        info "安装缺失依赖: ${to_install[*]}"
+        case "$OS" in
+            debian|ubuntu)
+                sudo apt update
+                sudo apt install -y "${to_install[@]}"
+                ;;
+            *)
+                error "不支持的系统: $OS"
+                exit 1
+                ;;
+        esac
+    else
         info "所有依赖已安装"
-        return
     fi
-
-    info "安装缺失依赖: ${to_install[*]}"
-    case "$OS" in
-        debian|ubuntu)
-            sudo apt update
-            sudo apt install -y "${to_install[@]}"
-            ;;
-        centos|rhel|fedora)
-            sudo yum install -y "${to_install[@]}" || sudo dnf install -y "${to_install[@]}"
-            ;;
-        alpine)
-            sudo apk add --no-cache "${to_install[@]}"
-            ;;
-        *)
-            error "不支持的系统: $OS"
-            exit 1
-            ;;
-    esac
 }
 
 # -------------------
-# 检测端口占用
+# 端口检测
 # -------------------
 check_ports() {
     local conflict=0
@@ -74,14 +67,10 @@ check_ports() {
 }
 
 # -------------------
-# 检查域名解析
+# 域名解析检测
 # -------------------
 check_domain() {
     local domain="$1"
-    if ! command -v host >/dev/null 2>&1; then
-        warn "host 命令未安装，跳过域名解析检查"
-        return
-    fi
     local ip
     ip=$(curl -s ifconfig.me)
     if host "$domain" | grep -q "$ip"; then
@@ -94,7 +83,7 @@ check_domain() {
 }
 
 # -------------------
-# 安装 Caddy（最新版）
+# 安装最新版 Caddy
 # -------------------
 install_caddy() {
     info "开始安装并配置 Caddy"
@@ -112,40 +101,38 @@ install_caddy() {
     echo "邮箱: $EMAIL"
     echo "后端: $UPSTREAM"
 
-    # 检查域名解析
+    # 域名解析
     check_domain "$DOMAIN"
 
     # 检查端口占用
-    HTTP_FREE=1
-    HTTPS_FREE=1
+    HTTP_FREE=1; HTTPS_FREE=1
     for port in 80 443; do
         if sudo lsof -i :"$port" -Pn -sTCP:LISTEN >/dev/null 2>&1; then
             [ $port -eq 80 ] && HTTP_FREE=0
             [ $port -eq 443 ] && HTTPS_FREE=0
         fi
     done
+
     if [ $HTTP_FREE -eq 0 ] && [ $HTTPS_FREE -eq 0 ] && [ -z "$CF_TOKEN" ]; then
-        error "80/443端口被占用且未提供 Cloudflare API Token，无法申请证书"
+        error "80/443端口都被占用且未提供 Cloudflare Token，无法申请证书"
         exit 1
     fi
 
-    # 安装最新版 Caddy
-    info "安装最新版 Caddy"
-    curl -fsSL https://getcaddy.com | bash -s personal
-
-    if ! command -v caddy >/dev/null 2>&1; then
-        error "Caddy 安装失败，未找到可执行文件"
-        exit 1
-    fi
+    # 安装 Caddy via 官方 apt 源
+    info "使用官方 apt 源安装 Caddy"
+    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+    sudo apt update
+    sudo apt install -y caddy || { error "Caddy 安装失败"; exit 1; }
 
     # 生成 Caddyfile
-    CADDYFILE="/etc/caddy/Caddyfile"
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
     sudo chown -R root:www-data /etc/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
-    CADDY_CONFIG="${DOMAIN} {
+    CADDYFILE="${DOMAIN} {
     encode gzip
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
@@ -156,100 +143,32 @@ install_caddy() {
 
     if [ $HTTP_FREE -eq 1 ]; then
         info "使用 HTTP-01 验证"
-        CADDY_CONFIG+="
+        CADDYFILE+="
     tls ${EMAIL}"
     elif [ $HTTPS_FREE -eq 1 ]; then
         info "使用 TLS-ALPN-01 验证"
-        CADDY_CONFIG+="
+        CADDYFILE+="
     tls ${EMAIL} {
         alpn tls
     }"
     else
         info "使用 DNS-01 验证"
-        CADDY_CONFIG+="
+        CADDYFILE+="
     tls {
         dns cloudflare ${CF_TOKEN}
         email ${EMAIL}
     }"
     fi
 
-    CADDY_CONFIG+="
+    CADDYFILE+="
 }"
 
-    echo "$CADDY_CONFIG" | sudo tee "$CADDYFILE" >/dev/null
+    echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
 
-    # 验证 Caddyfile
-    if ! sudo caddy validate --config "$CADDYFILE"; then
-        error "Caddyfile 语法错误"
-        exit 1
-    fi
-
-    # 启动 Caddy
-    sudo systemctl enable caddy
-    sudo systemctl restart caddy
+    # 验证并启动
+    sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
+    sudo systemctl enable --now caddy
     info "Caddy 已启动并设置开机自启"
-
-    # 简单检查证书
-    sleep 5
-    CERTS=$(sudo caddy list-certificates 2>/dev/null || true)
-    if echo "$CERTS" | grep -q "$DOMAIN"; then
-        info "证书已生成"
-    else
-        warn "证书未找到，请检查端口、DNS 或网络"
-    fi
-}
-
-# -------------------
-# 服务管理
-# -------------------
-manage_caddy() {
-    echo "1) 启动 Caddy"
-    echo "2) 停止 Caddy"
-    echo "3) 重启 Caddy"
-    echo "4) 查看日志"
-    echo "5) 查看证书状态"
-    read -rp "请选择: " choice
-    case $choice in
-        1) sudo systemctl start caddy && info "已启动";;
-        2) sudo systemctl stop caddy && info "已停止";;
-        3) sudo systemctl restart caddy && info "已重启";;
-        4) sudo journalctl -u caddy -f;;
-        5)
-            read -rp "输入域名: " dom
-            CERT_PATH="/etc/ssl/caddy/acme/acme-v02.api.letsencrypt.org/sites/${dom}"
-            if [ -d "$CERT_PATH" ]; then
-                info "证书路径: $CERT_PATH"
-                ls -l "$CERT_PATH"
-            else
-                warn "未找到证书"
-            fi
-            ;;
-        *) warn "无效选择";;
-    esac
-}
-
-# -------------------
-# 检查状态
-# -------------------
-check_status() {
-    if systemctl list-units --type=service | grep -q caddy.service; then
-        sudo systemctl status caddy.service --no-pager || warn "状态获取失败"
-    else
-        warn "未检测到 Caddy 服务"
-    fi
-}
-
-# -------------------
-# 卸载 Caddy
-# -------------------
-uninstall_caddy() {
-    read -rp "确认卸载 Caddy 吗？(y/n): " choice
-    [[ "$choice" =~ ^[Yy]$ ]] || return
-    sudo systemctl stop caddy || true
-    sudo systemctl disable caddy || true
-    sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy
-    sudo systemctl daemon-reload
-    info "Caddy 已卸载"
 }
 
 # -------------------
@@ -260,17 +179,24 @@ while true; do
     echo "      Caddy 一键管理脚本        "
     echo "==============================="
     echo "1) 安装并配置 Caddy"
-    echo "2) 检查状态"
-    echo "3) 管理服务"
-    echo "4) 卸载"
-    echo "5) 退出"
-    read -rp "请选择: " main_choice
-    case $main_choice in
+    echo "2) 检查 Caddy 状态"
+    echo "3) 卸载 Caddy"
+    echo "4) 退出"
+    read -rp "请选择操作: " choice
+    case $choice in
         1) detect_os; install_dependencies; install_caddy ;;
-        2) check_status ;;
-        3) manage_caddy ;;
-        4) detect_os; uninstall_caddy ;;
-        5) exit 0 ;;
-        *) warn "无效选择";;
+        2) systemctl status caddy --no-pager || warn "Caddy 未运行" ;;
+        3)
+            read -rp "确认卸载 Caddy 吗？(y/n): " c
+            [[ "$c" =~ ^[Yy]$ ]] || continue
+            sudo systemctl stop caddy || true
+            sudo systemctl disable caddy || true
+            sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
+            sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+            sudo systemctl daemon-reload
+            info "Caddy 已卸载"
+            ;;
+        4) exit 0 ;;
+        *) warn "无效选择" ;;
     esac
 done
