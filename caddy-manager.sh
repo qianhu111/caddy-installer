@@ -7,6 +7,7 @@ set -e
 GREEN="\033[1;32m"
 YELLOW="\033[1;33m"
 RED="\033[1;31m"
+BLUE="\033[0;34m"
 RESET="\033[0m"
 
 info()  { echo -e "${GREEN}[INFO]${RESET} $*"; }
@@ -222,9 +223,9 @@ install_caddy() {
 # 服务管理
 # -------------------
 manage_caddy() {
-    echo -e "\n==============================="
-    echo "          Caddy 服务管理        "
-    echo "==============================="
+    echo -e "${BLUE}===============================${RESET}"
+    echo -e "${BLUE}          Caddy 服务管理        ${RESET}"
+    echo -e "${BLUE}===============================${RESET}"
     echo "1) 启动 Caddy"
     echo "2) 停止 Caddy"
     echo "3) 重启 Caddy"
