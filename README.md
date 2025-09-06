@@ -108,8 +108,8 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
   * 仅 443 可用 → TLS-ALPN-01
   * 80/443 均被占用 → 提示失败并要求使用 DNS-01
 5. 证书申请与启动 Caddy
-  写入 /etc/caddy/Caddyfile，验证配置并启动 Caddy。
-  脚本会循环等待证书生成，并提示成功。
+  * 写入 /etc/caddy/Caddyfile，验证配置并启动 Caddy。
+  * 脚本会循环等待证书生成，并提示成功。
 
 ---
 
