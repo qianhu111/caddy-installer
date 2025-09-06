@@ -230,6 +230,31 @@ install_caddy() {
             exit 1
         fi
     fi
+
+    CADDYFILE+="
+}"
+
+    # 写入 Caddyfile 并验证
+    echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
+    sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
+    sudo systemctl enable
+    sudo systemctl restart caddy
+    info "Caddy 已启动并开机自启"
+
+    # 等待证书生成
+    if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+        CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-staging-v02.api.letsencrypt.org-directory/${DOMAIN}/"
+    else
+        CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/"
+    fi
+    info "等待证书生成..."
+    for i in {1..20}; do
+        if [ -d "$CERT_DIR" ] && [ "$(ls -A $CERT_DIR 2>/dev/null)" ]; then
+            info "证书已生成！"
+            break
+        fi
+        sleep 5
+    done
 }
 
 # -------------------
