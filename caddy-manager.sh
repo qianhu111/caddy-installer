@@ -8,6 +8,7 @@ GREEN="\033[1;32m"
 YELLOW="\033[1;33m"
 RED="\033[1;31m"
 BLUE="\033[0;34m"
+PURPLE="\033[1;35m"
 RESET="\033[0m"
 
 info()  { echo -e "${GREEN}[INFO]${RESET} $*"; }
@@ -223,9 +224,9 @@ install_caddy() {
 # 服务管理
 # -------------------
 manage_caddy() {
-    echo -e "\n${BLUE}===============================${RESET}"
-    echo -e "${BLUE}          Caddy 服务管理        ${RESET}"
-    echo -e "${BLUE}===============================${RESET}"
+    echo -e "\n${BLUE}========================================${RESET}"
+    echo -e "${BLUE}              Caddy 服务管理            ${RESET}"
+    echo -e "${BLUE}========================================${RESET}"
     echo "1) 启动 Caddy"
     echo "2) 停止 Caddy"
     echo "3) 重启 Caddy"
@@ -254,9 +255,9 @@ manage_caddy() {
 # 卸载 Caddy
 # -------------------
 uninstall_caddy() {
-    echo -e "\n${BLUE}===============================${RESET}"
-    echo -e "${BLUE}        卸载 Caddy 并清理       ${RESET}"
-    echo -e "${BLUE}===============================${RESET}"
+    echo -e "\n${BLUE}========================================${RESET}"
+    echo -e "${BLUE}            卸载 Caddy 并清理           ${RESET}"
+    echo -e "${BLUE}========================================${RESET}"
     read -rp "确认卸载 Caddy 吗？(y/n): " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || return
 
@@ -274,9 +275,9 @@ uninstall_caddy() {
 # 主菜单
 # -------------------
 while true; do
-    echo -e "\n${BLUE}===============================${RESET}"
-    echo -e "${BLUE}      Caddy 一键管理脚本 by:千狐       ${RESET}"
-    echo -e "${BLUE}===============================${RESET}"
+    echo -e "\n${BLUE}========================================${RESET}"
+    echo -e "      Caddy 一键管理脚本 ${PURPLE}by${RESET}:千狐       "
+    echo -e "${BLUE}========================================${RESET}"
     echo "1) 安装并配置 Caddy"
     echo "2) 检查 Caddy 状态"
     echo "3) 管理 Caddy 服务"
