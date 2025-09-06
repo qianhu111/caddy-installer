@@ -223,9 +223,9 @@ install_caddy() {
 # 服务管理
 # -------------------
 manage_caddy() {
-    echo -e "\n${BLUE}==============================="
-    echo "          Caddy 服务管理        "
-    echo "===============================${RESET}"
+    echo -e "\n${BLUE}===============================${RESET}"
+    echo -e "${BLUE}          Caddy 服务管理        ${RESET}"
+    echo -e "${BLUE}===============================${RESET}"
     echo "1) 启动 Caddy"
     echo "2) 停止 Caddy"
     echo "3) 重启 Caddy"
@@ -254,9 +254,9 @@ manage_caddy() {
 # 卸载 Caddy
 # -------------------
 uninstall_caddy() {
-    echo -e "\n==============================="
-    echo "        卸载 Caddy 并清理       "
-    echo "==============================="
+    echo -e "\n${BLUE}===============================${RESET}"
+    echo -e "${BLUE}        卸载 Caddy 并清理       ${RESET}"
+    echo -e "${BLUE}===============================${RESET}"
     read -rp "确认卸载 Caddy 吗？(y/n): " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || return
 
@@ -274,9 +274,9 @@ uninstall_caddy() {
 # 主菜单
 # -------------------
 while true; do
-    echo -e "\n==============================="
-    echo "      Caddy 一键管理脚本        "
-    echo "==============================="
+    echo -e "\n${BLUE}===============================${RESET}"
+    echo -e "${BLUE}      Caddy 一键管理脚本        ${RESET}"
+    echo -e "${BLUE}===============================${RESET}"
     echo "1) 安装并配置 Caddy"
     echo "2) 检查 Caddy 状态"
     echo "3) 管理 Caddy 服务"
