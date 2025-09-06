@@ -198,7 +198,8 @@ install_caddy() {
     # 写入 Caddyfile 并验证
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
-    sudo systemctl enable --now caddy
+    sudo systemctl enable
+    sudo systemctl restart caddy
     info "Caddy 已启动并开机自启"
 
     # 等待证书生成
