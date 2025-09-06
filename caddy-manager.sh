@@ -181,17 +181,15 @@ install_caddy() {
     info "Caddy 已启动并开机自启"
 
     # 等待证书生成
-    info "等待 30 秒以生成证书..."
-    sleep 30
-
-    # 显示证书路径
-    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates"
-    if [ -d "$CERT_DIR" ]; then
-        info "证书文件列表:"
-        find "$CERT_DIR" -type f \( -name "${DOMAIN}*.crt" -o -name "${DOMAIN}*.key" \)
-    else
-        warn "证书目录不存在: $CERT_DIR"
-    fi
+    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/"
+    info "等待证书生成..."
+    for i in {1..20}; do
+        if [ -d "$CERT_DIR" ] && [ "$(ls -A $CERT_DIR 2>/dev/null)" ]; then
+            info "证书已生成！"
+            break
+        fi
+        sleep 5
+    done
 }
 
 # -------------------
