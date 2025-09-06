@@ -144,7 +144,7 @@ sudo systemctl daemon-reload
 
 开源协议
 
-MIT License，详情请见 LICENSE。
+MIT License，详情请见 [LICENSE](https://github.com/qianhu111/caddy-manager/blob/7dbbffa389c11f90feef9fc2c1e97469beb432c7/LICENSE)。
 
 ---
 
