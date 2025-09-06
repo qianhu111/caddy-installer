@@ -99,7 +99,7 @@ install_caddy() {
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
     read -rp "请输入 Cloudflare API Token (可留空使用 HTTP/DNS 验证): " CF_TOKEN
-    read -rp "是否使用 Let’s Encrypt 测试环境 (避免限额, y/n): " TEST_MODE
+    read -rp "是否使用 Let’s Encrypt 测试环境 (避免限额，仅测试用，默认n, y/n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
@@ -151,6 +151,21 @@ install_caddy() {
         CADDYFILE+="
     }"
     else
+        # 用户选择证书厂商
+        echo -e "\n请选择证书厂商 (默认 1=Let's Encrypt):"
+        echo "1) Let's Encrypt"
+        echo "2) ZeroSSL"
+        echo "3) Buypass"
+        read -rp "请输入序号 [1-3]: " CERT_PROVIDER
+        CERT_PROVIDER=${CERT_PROVIDER:-1}  # 默认选择 1
+    
+        case $CERT_PROVIDER in
+            1) CA_URL="" ;;  # Let's Encrypt 默认
+            2) CA_URL="https://acme.zerossl.com/v2/DV90" ;;
+            3) CA_URL="https://api.buypass.com/acme/directory" ;;
+            *) info "无效选择，使用默认 Let's Encrypt"; CA_URL="" ;;
+        esac
+    
         if [ "$HTTP_FREE" -eq 1 ] && [ "$HTTPS_FREE" -eq 1 ]; then
             info "80/443 端口均可用，使用 HTTP-01 (推荐)"
             if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -159,8 +174,15 @@ install_caddy() {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
     }"
             else
-                CADDYFILE+="
+                if [[ -n "$CA_URL" ]]; then
+                    CADDYFILE+="
+    tls ${EMAIL} {
+        ca ${CA_URL}
+    }"
+                else
+                    CADDYFILE+="
     tls ${EMAIL}"
+                fi
             fi
         elif [ "$HTTP_FREE" -eq 1 ]; then
             info "仅 80 端口可用，使用 HTTP-01"
@@ -170,8 +192,15 @@ install_caddy() {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
     }"
             else
-                CADDYFILE+="
+                if [[ -n "$CA_URL" ]]; then
+                    CADDYFILE+="
+    tls ${EMAIL} {
+        ca ${CA_URL}
+    }"
+                else
+                    CADDYFILE+="
     tls ${EMAIL}"
+                fi
             fi
         elif [ "$HTTPS_FREE" -eq 1 ]; then
             info "仅 443 端口可用，使用 TLS-ALPN-01"
@@ -182,10 +211,18 @@ install_caddy() {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
     }"
             else
-                CADDYFILE+="
+                if [[ -n "$CA_URL" ]]; then
+                    CADDYFILE+="
+    tls ${EMAIL} {
+        alpn tls-alpn-01
+        ca ${CA_URL}
+    }"
+                else
+                    CADDYFILE+="
     tls ${EMAIL} {
         alpn tls-alpn-01
     }"
+                fi
             fi
         else
             error "80/443 端口均被占用，无法申请证书"
@@ -193,32 +230,6 @@ install_caddy() {
             exit 1
         fi
     fi
-
-    CADDYFILE+="
-}"
-
-    # 写入 Caddyfile 并验证
-    echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
-    sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
-    sudo systemctl enable
-    sudo systemctl restart caddy
-    info "Caddy 已启动并开机自启"
-
-    # 等待证书生成
-    if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-        CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-staging-v02.api.letsencrypt.org-directory/${DOMAIN}/"
-    else
-        CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/"
-    fi
-    info "等待证书生成..."
-    for i in {1..20}; do
-        if [ -d "$CERT_DIR" ] && [ "$(ls -A $CERT_DIR 2>/dev/null)" ]; then
-            info "证书已生成！"
-            break
-        fi
-        sleep 5
-    done
-}
 
 # -------------------
 # 服务管理
