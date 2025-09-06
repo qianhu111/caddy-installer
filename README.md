@@ -12,29 +12,26 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
 ## 功能特性
 
 - **一键安装 Caddy**  
-  自动选择官方 apt 源安装或二进制版本，设置 systemd 服务并开机自启。
+  自动添加官方 apt 源并安装最新版 Caddy，配置 systemd 服务并开机自启。
 
 - **自动申请 SSL 证书**  
   支持 HTTP-01、TLS-ALPN-01、DNS-01（Cloudflare Token）验证方式。  
-  支持 Let’s Encrypt / ZeroSSL / Buypass 可选证书厂商。  
+  支持 Let’s Encrypt / ZeroSSL / Buypass 证书厂商选择。  
 
 - **交互式配置**  
-  提示用户输入域名、邮箱、反向代理目标、Cloudflare Token 等信息，支持默认值和格式验证。
+  提示用户输入域名、邮箱、反向代理目标、Cloudflare Token 等信息，支持测试环境。
 
 - **端口与系统检测**  
-  自动检测 80/443 是否可用，检测操作系统类型及包管理器，安装缺失依赖。
+  自动检测 80/443 是否可用，检测操作系统类型及依赖安装。
 
 - **中文化输出**  
   安装过程和错误提示均为中文，友好易用。
 
-- **日志记录**  
-  安装过程输出到终端并写入 `/tmp/caddy_install.log`。
-
 - **服务管理**  
   提供启动、停止、重启、查看日志和证书文件的操作。
 
-- **卸载与回滚**  
-  可彻底卸载 Caddy 并清理配置和证书文件，安装失败时自动回滚。
+- **卸载功能**  
+  可彻底卸载 Caddy 并清理配置和证书文件。
 
 ---
 
@@ -98,22 +95,21 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
 1. 系统与依赖检测
   自动识别 Ubuntu/Debian 系统，检查 curl、lsof、host、gnupg 等工具是否安装，缺失则自动安装。
 
-2. 端口检查
-  检测 80/443 端口是否可用，提示用户选择验证方式。
+2. 域名解析检测
+检查域名是否解析到当前服务器 IP，若未解析，会提示用户确认是否继续。
 
-3. 生成 Caddyfile
-  根据用户输入的域名、邮箱、反向代理目标和 Cloudflare Token 自动生成配置文件。
+3. 端口检查
+  检测 80/443 端口是否可用，自动决定证书申请方式。
 
-4. 启动 Caddy 并申请证书
-
-  * 优先使用 DNS-01（Cloudflare Token）
-
-  * 其次使用 HTTP-01（优先 IPv4）
-
-  * 最后使用 TLS-ALPN-01（优先 IPv4，如果失败尝试 IPv6）
-
-5. 证书生成等待
-  脚本会循环等待证书生成，并提示成功。
+4.	生成 Caddyfile
+根据用户输入的域名、邮箱、反向代理目标和 Cloudflare Token 自动生成配置文件。
+	•	使用 Cloudflare Token → DNS-01 验证
+	•	80/443 可用 → HTTP-01
+	•	仅 443 可用 → TLS-ALPN-01
+	•	80/443 均被占用 → 提示失败并要求使用 DNS-01
+	5.	证书申请与启动 Caddy
+写入 /etc/caddy/Caddyfile，验证配置并启动 Caddy。
+脚本会循环等待证书生成，并提示成功。
 
 ---
 
@@ -140,17 +136,13 @@ nameserver.example.com {
 
 * 需要 root 或 sudo 权限执行
 
-* 仅支持 Cloudflare DNS-01 验证（DNS-01 必选）
-
 ---
 
 ## 注意事项
 
 * 若 80/443 端口被占用，自动申请证书可能失败，可提供 Cloudflare Token 使用 DNS-01 方式。
 
-* 安装过程中生成的日志保存在 /tmp/caddy_install.log，可用于排查问题。
-
-* 卸载时会彻底清理 Caddy 二进制、配置和证书文件。
+* 证书文件默认存放在 /var/lib/caddy/.local/share/caddy/certificates。
 
 ---
 
