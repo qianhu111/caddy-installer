@@ -127,73 +127,68 @@ install_caddy() {
     # 生成 Caddyfile
     # -------------------
     CADDYFILE="${DOMAIN} {
-    encode gzip
-    reverse_proxy ${UPSTREAM} {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Port {server_port}
-    }"
-
+        encode gzip
+        reverse_proxy ${UPSTREAM} {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Port {server_port}
+        }"
+    
     # -------------------
-    # 证书逻辑：优先 DNS-01 -> HTTP-01 -> TLS-ALPN-01
+    # 证书逻辑
     # -------------------
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
-    tls {
-        dns cloudflare {env.CF_API_TOKEN}"
+        tls {
+            dns cloudflare {env.CF_API_TOKEN}"
         if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
             CADDYFILE+="
-        ca https://acme-staging-v02.api.letsencrypt.org/directory"
+            ca https://acme-staging-v02.api.letsencrypt.org/directory"
         fi
         CADDYFILE+="
-    }"
-    else
-        if [ "$HTTP_FREE" -eq 1 ] && [ "$HTTPS_FREE" -eq 1 ]; then
-            info "80/443 端口均可用，使用 HTTP-01 (推荐)"
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
-    tls {
-        ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
-    tls ${EMAIL}"
-            fi
-        elif [ "$HTTP_FREE" -eq 1 ]; then
-            info "仅 80 端口可用，使用 HTTP-01"
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
-    tls {
-        ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
-    tls ${EMAIL}"
-            fi
-        elif [ "$HTTPS_FREE" -eq 1 ]; then
-            info "仅 443 端口可用，使用 TLS-ALPN-01"
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
-    tls {
-        alpn tls-alpn-01
-        ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
-    tls ${EMAIL} {
-        alpn tls-alpn-01
-    }"
-            fi
+        }"
+    
+    elif [ "$HTTP_FREE" -eq 1 ]; then
+        info "使用 HTTP-01 验证"
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            # 测试环境，HTTP-01
+            CADDYFILE+="
+        tls {
+            email ${EMAIL}
+            ca https://acme-staging-v02.api.letsencrypt.org/directory
+        }"
         else
-            error "80/443 端口均被占用，无法申请证书"
-            error "请提供 Cloudflare Token 以使用 DNS-01 方式"
-            exit 1
+            # 正式环境
+            CADDYFILE+="
+        tls ${EMAIL}"
         fi
+    
+    elif [ "$HTTPS_FREE" -eq 1 ]; then
+        info "使用 TLS-ALPN-01 验证"
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            CADDYFILE+="
+        tls {
+            email ${EMAIL}
+            alpn tls-alpn-01
+            ca https://acme-staging-v02.api.letsencrypt.org/directory
+        }"
+        else
+            CADDYFILE+="
+        tls ${EMAIL} {
+            alpn tls-alpn-01
+        }"
+        fi
+    
+    else
+        error "80/443 端口均被占用，无法申请证书"
+        error "请提供 Cloudflare Token 以使用 DNS-01 方式"
+        exit 1
     fi
-
+    
     CADDYFILE+="
 }"
+
 
     # 写入 Caddyfile 并验证
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
