@@ -275,7 +275,7 @@ uninstall_caddy() {
 # -------------------
 while true; do
     echo -e "\n${BLUE}===============================${RESET}"
-    echo -e "${BLUE}      Caddy 一键管理脚本        ${RESET}"
+    echo -e "${BLUE}      Caddy 一键管理脚本 by:千狐       ${RESET}"
     echo -e "${BLUE}===============================${RESET}"
     echo "1) 安装并配置 Caddy"
     echo "2) 检查 Caddy 状态"
