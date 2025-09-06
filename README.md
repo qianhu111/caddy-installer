@@ -96,20 +96,20 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
   自动识别 Ubuntu/Debian 系统，检查 curl、lsof、host、gnupg 等工具是否安装，缺失则自动安装。
 
 2. 域名解析检测
-检查域名是否解析到当前服务器 IP，若未解析，会提示用户确认是否继续。
+  检查域名是否解析到当前服务器 IP，若未解析，会提示用户确认是否继续。
 
 3. 端口检查
   检测 80/443 端口是否可用，自动决定证书申请方式。
 
-4.	生成 Caddyfile
-根据用户输入的域名、邮箱、反向代理目标和 Cloudflare Token 自动生成配置文件。
-	•	使用 Cloudflare Token → DNS-01 验证
-	•	80/443 可用 → HTTP-01
-	•	仅 443 可用 → TLS-ALPN-01
-	•	80/443 均被占用 → 提示失败并要求使用 DNS-01
-	5.	证书申请与启动 Caddy
-写入 /etc/caddy/Caddyfile，验证配置并启动 Caddy。
-脚本会循环等待证书生成，并提示成功。
+4. 生成 Caddyfile
+  根据用户输入的域名、邮箱、反向代理目标和 Cloudflare Token 自动生成配置文件。
+  * 使用 Cloudflare Token → DNS-01 验证
+  * 80/443 可用 → HTTP-01
+  * 仅 443 可用 → TLS-ALPN-01
+  * 80/443 均被占用 → 提示失败并要求使用 DNS-01
+5. 证书申请与启动 Caddy
+  写入 /etc/caddy/Caddyfile，验证配置并启动 Caddy。
+  脚本会循环等待证书生成，并提示成功。
 
 ---
 
