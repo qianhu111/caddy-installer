@@ -43,7 +43,7 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
 ### 在线执行
 
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/caddy-install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/caddy-manager.sh)
 ```
 
 ### Cloudflare Token 获取方式
