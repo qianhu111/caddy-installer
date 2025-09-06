@@ -128,7 +128,7 @@ install_caddy() {
         header_up X-Forwarded-Port {server_port}
     }"
 
-    # 优先 DNS-01
+    # 证书逻辑：优先 DNS-01 -> HTTP-01 -> TLS-ALPN-01
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证"
         export CF_API_TOKEN="$CF_TOKEN"
@@ -141,7 +141,6 @@ install_caddy() {
         fi
         CADDYFILE+="
     }"
-    # HTTP-01
     elif [ $HTTP_FREE -eq 1 ]; then
         info "使用 HTTP-01 验证"
         if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -153,7 +152,6 @@ install_caddy() {
             CADDYFILE+="
     tls ${EMAIL}"
         fi
-    # TLS-ALPN-01
     elif [ $HTTPS_FREE -eq 1 ]; then
         info "使用 TLS-ALPN-01 验证"
         if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -172,16 +170,18 @@ install_caddy() {
         error "端口被占用且未提供 CF Token，无法申请证书"
         exit 1
     fi
+
     CADDYFILE+="
 }"
 
+    # 写入 Caddyfile 并验证
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
     sudo systemctl enable --now caddy
     info "Caddy 已启动并开机自启"
 
     # 等待证书生成
-    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/"
+    CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-staging-v02.api.letsencrypt.org-directory/${DOMAIN}/"
     info "等待证书生成..."
     for i in {1..20}; do
         if [ -d "$CERT_DIR" ] && [ "$(ls -A $CERT_DIR 2>/dev/null)" ]; then
@@ -262,6 +262,6 @@ while true; do
         3) manage_caddy ;;
         4) detect_os; uninstall_caddy ;;
         5) exit 0 ;;
-        *) warn "无效选择";;
+        *) warn "无效选择" ;;
     esac
 done
