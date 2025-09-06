@@ -223,9 +223,9 @@ install_caddy() {
 # 服务管理
 # -------------------
 manage_caddy() {
-    echo -e "${BLUE}===============================${RESET}"
-    echo -e "${BLUE}          Caddy 服务管理        ${RESET}"
-    echo -e "${BLUE}===============================${RESET}"
+    echo -e "\n${BLUE}==============================="
+    echo "          Caddy 服务管理        "
+    echo "===============================${RESET}"
     echo "1) 启动 Caddy"
     echo "2) 停止 Caddy"
     echo "3) 重启 Caddy"
