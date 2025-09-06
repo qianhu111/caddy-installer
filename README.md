@@ -154,7 +154,7 @@ nameserver.example.com {
 
 ---
 
-卸载命令
+## 卸载命令
 
 执行脚本选择“卸载 Caddy”，或手动执行：
 
