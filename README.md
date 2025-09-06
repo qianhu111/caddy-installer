@@ -46,6 +46,33 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
 bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/caddy-install.sh)
 ```
 
+### Cloudflare Token 获取方式
+
+1. 登录 Cloudflare
+访问 [Cloudflare 仪表盘](https://dash.cloudflare.com)，使用你的账户登录。
+
+2. 进入 API Tokens 页面
+  * 在右上角点击 个人资料头像 → 我的个人资料。
+  * 左侧菜单选择 API Tokens。
+
+3. 创建 Token
+  * 点击 Create Token（创建 Token）。
+  * Cloudflare 提供了一个 预设模板，选择 Edit zone DNS（用于编辑 DNS 的模板）即可。
+    * 或者选择 Use custom token 来自定义权限。
+
+4. 设置权限（DNS-01 验证最小权限）
+如果选择自定义 Token：
+
+| 资源 | 权限 |
+|---|---|
+| Zone Resources | Include → 指定你的域名（例如 example.com） |
+| DNS | Edit |
+
+6. 生成并保存 Token
+  * 点击 Continue to summary → Create Token。
+  * 复制生成的 Token，并妥善保存（只显示一次）。
+  > 脚本中使用这个 Token 时，可以直接填入 Cloudflare API Token 字段，或者导出环境变量 CF_API_TOKEN="你的Token"。
+
 ---
 
 ## 脚本功能菜单
