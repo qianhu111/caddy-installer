@@ -186,46 +186,54 @@ install_caddy() {
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
     # -------------------
-    # 安装 Caddy (方式一)
+    # 安装 Caddy
     # -------------------
-    if [[ -f /etc/debian_version ]]; then
-        OS="Debian/Ubuntu"
-        info "检测到系统: $OS"
-        sudo apt update
-        sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy.gpg >/dev/null
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy.list
-        sudo apt update
-        sudo apt install -y caddy
-    elif [[ -f /etc/redhat-release ]]; then
-        if grep -qi "centos" /etc/redhat-release; then
-            OS="CentOS"
-        else
-            OS="RHEL"
-        fi
-        info "检测到系统: $OS"
-        sudo yum install -y yum-plugin-copr
-        sudo yum copr enable @caddy/caddy
-        sudo yum install -y caddy
-    elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
-        OS="Fedora"
-        info "检测到系统: Fedora"
-        sudo dnf install -y 'dnf-command(copr)'
-        sudo dnf copr enable @caddy/caddy
-        sudo dnf install -y caddy
-    elif grep -qi "alpine" /etc/os-release 2>/dev/null; then
-        OS="Alpine"
-        info "检测到系统: Alpine"
-        # Alpine 官方源 caddy 无 cloudflare 插件 → 用二进制安装
+    if [[ -n "$CF_TOKEN" ]]; then
+        # 用户输入了 Cloudflare Token → 下载带插件的二进制 Caddy
+        info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy 二进制..."
         CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
         wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
         tar -xzf /tmp/caddy.tar.gz -C /tmp
         sudo mv /tmp/caddy /usr/local/bin/caddy
         sudo chmod +x /usr/local/bin/caddy
+    
     else
-        error "暂不支持的系统"
-        exit 1
+        # 用户未输入 Token → 根据系统安装普通 Caddy
+        detect_os
+        install_dependencies
+        
+        if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+            info "使用 apt 安装普通 Caddy"
+            # 下载并安装 Cloudsmith 公钥
+            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy-stable-archive-keyring.gpg >/dev/null
+            # 配置 apt 源
+            echo "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee /etc/apt/sources.list.d/caddy.list
+            echo "deb-src [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee -a /etc/apt/sources.list.d/caddy.list
+            sudo apt update
+            sudo apt install -y caddy
+        elif [[ "$OS" == "centos" || "$OS" == "rhel" ]]; then
+            info "使用 yum 安装普通 Caddy"
+            sudo yum install -y yum-plugin-copr
+            sudo yum copr enable @caddy/caddy
+            sudo yum install -y caddy
+        elif [[ "$OS" == "fedora" ]]; then
+            info "使用 dnf 安装普通 Caddy"
+            sudo dnf install -y 'dnf-command(copr)'
+            sudo dnf copr enable @caddy/caddy
+            sudo dnf install -y caddy
+        elif [[ "$OS" == "alpine" ]]; then
+            info "Alpine 系统使用二进制安装普通 Caddy"
+            CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
+            wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+            tar -xzf /tmp/caddy.tar.gz -C /tmp
+            sudo mv /tmp/caddy /usr/local/bin/caddy
+            sudo chmod +x /usr/local/bin/caddy
+        else
+            error "暂不支持的系统"
+            exit 1
+        fi
     fi
+
     info "Caddy 安装完成"
 
     # -------------------
