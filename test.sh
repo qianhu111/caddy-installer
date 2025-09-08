@@ -194,8 +194,8 @@ install_caddy() {
         CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
         wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
         tar -xzf /tmp/caddy.tar.gz -C /tmp
-        sudo mv /tmp/caddy /usr/local/bin/caddy
-        sudo chmod +x /usr/local/bin/caddy
+        sudo mv /tmp/caddy /usr/bin/caddy
+        sudo chmod +x /usr/bin/caddy
     
     else
         # 用户未输入 Token → 根据系统安装普通 Caddy
