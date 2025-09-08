@@ -187,7 +187,7 @@ install_caddy() {
         info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
     
         # 使用官方下载 API，自动生成带 Cloudflare 插件的 Caddy
-        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
+        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=95604088870894"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
         
         wget -O /usr/bin/caddy "$DOWNLOAD_URL"
