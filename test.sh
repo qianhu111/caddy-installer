@@ -201,21 +201,24 @@ install_caddy() {
     PLUGIN="github.com/caddy-dns/cloudflare"
 
     # 下载官方 builder 构建好的带插件二进制
-    curl -sSL "https://caddyserver.com/api/download?os=linux&arch=amd64&idempotency=1234&plugins=$PLUGIN" -o caddy.tar.gz
+    curl -sSL "https://caddyserver.com/api/download?os=linux&arch=amd64&idempotency=1234&plugins=$PLUGIN" -o caddy
 
-    # 解压并安装
-    tar -xzf caddy.tar.gz
+    # 直接安装
     sudo mv caddy /usr/local/bin/caddy
     sudo chmod +x /usr/local/bin/caddy
 
     info "带 Cloudflare 插件的 Caddy 安装完成"
 
+    # 创建证书存放目录
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
+    # 配置 systemd 环境变量，指定证书存储路径
     sudo mkdir -p /etc/systemd/system/caddy.service.d
     echo -e "[Service]\nEnvironment=CADDY_STORAGE_DIR=/etc/ssl/caddy" | sudo tee /etc/systemd/system/caddy.service.d/override.conf
+    
+    # 重新加载 systemd 并启动 Caddy
     sudo systemctl daemon-reload
     sudo systemctl restart caddy
 
