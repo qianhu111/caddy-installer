@@ -189,13 +189,29 @@ install_caddy() {
     # 安装 Caddy
     # -------------------
     if [[ -n "$CF_TOKEN" ]]; then
-        # 用户输入了 Cloudflare Token → 下载带插件的二进制 Caddy
-        info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy 二进制..."
-        CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
-        wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
-        tar -xzf /tmp/caddy.tar.gz -C /tmp
-        sudo mv /tmp/caddy /usr/bin/caddy
+        # 用户输入了 Cloudflare Token → 使用 xcaddy 编译带插件的 Caddy
+        info "检测到 Cloudflare Token，使用 xcaddy 编译带 Cloudflare 插件的 Caddy..."
+
+        # 安装 Go 和 git（如果未安装）
+        if ! command -v go >/dev/null 2>&1; then
+            info "检测到未安装 Go，正在安装..."
+            sudo apt update
+            sudo apt install -y golang-go git
+        fi
+
+        # 安装 xcaddy
+        info "安装 xcaddy..."
+        export PATH=$PATH:$(go env GOPATH)/bin
+        go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+        # 编译 Caddy 带 Cloudflare 插件
+        xcaddy build --with github.com/caddy-dns/cloudflare
+
+        # 移动到 /usr/bin 并设置权限
+        sudo mv caddy /usr/bin/caddy
         sudo chmod +x /usr/bin/caddy
+
+        info "✅ 带 Cloudflare 插件的 Caddy 安装完成"
     
     else
         # 用户未输入 Token → 根据系统安装普通 Caddy
@@ -234,7 +250,7 @@ install_caddy() {
         fi
     fi
 
-    info "Caddy 安装完成"
+    info "✅ Caddy 安装完成"
 
     # -------------------
     # 准备目录
