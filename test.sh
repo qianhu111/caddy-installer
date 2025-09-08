@@ -74,13 +74,14 @@ get_public_ip() {
         info "检测到本机 IPv4: ${GREEN}${ipv4}${RESET}"
     else
         info "未检测到本机 IPv4，使用外部服务获取公网 IPv4..."
-        ipv4=$(curl -s4 --max-time 5 https://ip.sb 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
-        if [[ -n "$ipv4" ]]; then
-            info "外部服务返回 IPv4: ${GREEN}${ipv4}${RESET}"
-        else
-            ipv4="无 IPv4"
-            warn "未能获取公网 IPv4"
-        fi
+        for url in "https://ip.sb" "https://ifconfig.co" "https://api.ipify.org"; do
+            ipv4=$(curl -4 -s --max-time 5 "$url")
+            if [[ "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                info "外部服务返回 IPv4: ${GREEN}${ipv4}${RESET}"
+                break
+            fi
+        done
+        [[ -z "$ipv4" ]] && { ipv4="无 IPv4"; warn "未能获取公网 IPv4"; }
     fi
 
     # ---------- IPv6 ----------
@@ -92,13 +93,14 @@ get_public_ip() {
         info "检测到本机 IPv6: ${GREEN}${ipv6}${RESET}"
     else
         info "未检测到本机 IPv6，使用外部服务获取公网 IPv6..."
-        ipv6=$(curl -s6 --max-time 5 https://ip.sb 2>/dev/null | head -n1)
-        if [[ -n "$ipv6" ]]; then
-            info "外部服务返回 IPv6: ${GREEN}${ipv6}${RESET}"
-        else
-            ipv6="无 IPv6"
-            warn "未能获取公网 IPv6"
-        fi
+        for url in "https://ip.sb" "https://ifconfig.co"; do
+            ipv6=$(curl -6 -s --max-time 5 "$url")
+            if [[ "$ipv6" =~ ^[0-9a-fA-F:]+$ ]]; then
+                info "外部服务返回 IPv6: ${GREEN}${ipv6}${RESET}"
+                break
+            fi
+        done
+        [[ -z "$ipv6" ]] && { ipv6="无 IPv6"; warn "未能获取公网 IPv6"; }
     fi
 
     info "服务器公网 IPv4: ${GREEN}${ipv4}${RESET}"
@@ -233,23 +235,23 @@ install_caddy() {
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
         export CF_API_TOKEN="$CF_TOKEN"
-    
+
         # 基本 tls 配置
         CADDYFILE+="
         tls {
             dns cloudflare {env.CF_API_TOKEN}
             storage file_system /etc/ssl/caddy"
-    
+
         # 测试模式下使用 Let's Encrypt staging
         if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
             CADDYFILE+="
             ca https://acme-staging-v02.api.letsencrypt.org/directory"
         fi
-    
+
         # 关闭 tls 块
         CADDYFILE+="
         }"
-    
+
     else
         # 未提供 Cloudflare Token，优先 HTTP-01 / TLS-ALPN-01
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
@@ -266,7 +268,7 @@ install_caddy() {
             storage file_system /etc/ssl/caddy
         }"
             fi
-    
+
         elif [[ $HTTP_FREE -eq 1 ]]; then
             info "仅 80 端口可用，使用 HTTP-01"
             if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -281,7 +283,7 @@ install_caddy() {
             storage file_system /etc/ssl/caddy
         }"
             fi
-    
+
         elif [[ $HTTPS_FREE -eq 1 ]]; then
             info "仅 443 端口可用，使用 TLS-ALPN-01"
             if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
@@ -298,14 +300,14 @@ install_caddy() {
             alpn tls-alpn-01
         }"
             fi
-    
+
         else
             error "80/443 端口均被占用，无法申请证书"
             error "请提供 Cloudflare Token 使用 DNS-01 方式"
             exit 1
         fi
     fi
-    
+
     # 关闭 Caddyfile 块
     CADDYFILE+="
     }"
