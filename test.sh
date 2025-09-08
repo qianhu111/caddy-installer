@@ -190,9 +190,7 @@ install_caddy() {
         DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
         
-        wget -O /tmp/caddy.tar.gz "$DOWNLOAD_URL"
-        tar -xzf /tmp/caddy.tar.gz -C /tmp
-        sudo mv /tmp/caddy /usr/bin/caddy
+        wget -O /usr/bin/caddy "$DOWNLOAD_URL"
         sudo chmod +x /usr/bin/caddy
     
         # 检查是否安装成功
