@@ -185,13 +185,23 @@ install_caddy() {
     # --------- Cloudflare Token 优先 ---------
     if [[ -n "$CF_TOKEN" ]]; then
         info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
-        CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
-        DOWNLOAD_URL="https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+    
+        # 使用官方下载 API，自动生成带 Cloudflare 插件的 Caddy
+        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
+        
         wget -O /tmp/caddy.tar.gz "$DOWNLOAD_URL"
         tar -xzf /tmp/caddy.tar.gz -C /tmp
         sudo mv /tmp/caddy /usr/bin/caddy
         sudo chmod +x /usr/bin/caddy
+    
+        # 检查是否安装成功
+        if /usr/bin/caddy version | grep -q 'cloudflare'; then
+            info "✅ Caddy 安装完成，Cloudflare 插件已集成"
+        else
+            error "❌ Caddy 安装失败，未集成 Cloudflare 插件"
+            exit 1
+        fi
     else
         info "未检测到 Cloudflare Token，使用系统包安装 Caddy"
         case "$OS" in
