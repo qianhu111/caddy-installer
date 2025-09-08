@@ -174,107 +174,75 @@ check_ports() {
 # 安装并配置 Caddy
 # ========================================
 install_caddy() {
-    # -------------------
-    # 用户输入
-    # -------------------
     read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
-    read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
+    read -rp "请输入反向代理目标地址 (127.0.0.1:8888): " UPSTREAM
     read -rp "请输入 Cloudflare API Token (可留空使用 HTTP 验证): " CF_TOKEN
-    read -rp "是否使用 Let’s Encrypt 测试环境 (y/n，默认n): " TEST_MODE
+    read -rp "是否使用 Let's Encrypt 测试环境 (y/n, 默认n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
-    # -------------------
-    # 安装 Caddy
-    # -------------------
+    # --------- Cloudflare Token 优先 ---------
     if [[ -n "$CF_TOKEN" ]]; then
-        # 用户输入了 Cloudflare Token → 使用 xcaddy 编译带插件的 Caddy
-        info "检测到 Cloudflare Token，使用 xcaddy 编译带 Cloudflare 插件的 Caddy..."
-
-        # 安装 Go 和 git（如果未安装）
-        if ! command -v go >/dev/null 2>&1; then
-            info "检测到未安装 Go，正在安装..."
-            sudo apt update
-            sudo apt install -y golang-go git
-        fi
-
-        # 安装 xcaddy
-        info "安装 xcaddy..."
-        export PATH=$PATH:$(go env GOPATH)/bin
-        go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-
-        # 编译 Caddy 带 Cloudflare 插件
-        xcaddy build --with github.com/caddy-dns/cloudflare
-
-        # 移动到 /usr/bin 并设置权限
-        sudo mv caddy /usr/bin/caddy
+        info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
+        CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
+        DOWNLOAD_URL="https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+        info "下载 Caddy 二进制: $DOWNLOAD_URL"
+        wget -O /tmp/caddy.tar.gz "$DOWNLOAD_URL"
+        tar -xzf /tmp/caddy.tar.gz -C /tmp
+        sudo mv /tmp/caddy /usr/bin/caddy
         sudo chmod +x /usr/bin/caddy
-
-        info "✅ 带 Cloudflare 插件的 Caddy 安装完成"
-    
     else
-        # 用户未输入 Token → 根据系统安装普通 Caddy
-        detect_os
-        install_dependencies
-        
-        if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-            info "使用 apt 安装普通 Caddy"
-            # 下载并安装 Cloudsmith 公钥
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy-stable-archive-keyring.gpg >/dev/null
-            # 配置 apt 源
-            echo "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee /etc/apt/sources.list.d/caddy.list
-            echo "deb-src [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee -a /etc/apt/sources.list.d/caddy.list
-            sudo apt update
-            sudo apt install -y caddy
-        elif [[ "$OS" == "centos" || "$OS" == "rhel" ]]; then
-            info "使用 yum 安装普通 Caddy"
-            sudo yum install -y yum-plugin-copr
-            sudo yum copr enable @caddy/caddy
-            sudo yum install -y caddy
-        elif [[ "$OS" == "fedora" ]]; then
-            info "使用 dnf 安装普通 Caddy"
-            sudo dnf install -y 'dnf-command(copr)'
-            sudo dnf copr enable @caddy/caddy
-            sudo dnf install -y caddy
-        elif [[ "$OS" == "alpine" ]]; then
-            info "Alpine 系统使用二进制安装普通 Caddy"
-            CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
-            wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
-            tar -xzf /tmp/caddy.tar.gz -C /tmp
-            sudo mv /tmp/caddy /usr/local/bin/caddy
-            sudo chmod +x /usr/local/bin/caddy
-        else
-            error "暂不支持的系统"
-            exit 1
-        fi
+        info "未检测到 Cloudflare Token，使用系统包安装 Caddy"
+        case "$OS" in
+            debian|ubuntu)
+                sudo apt update
+                sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+                curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy-archive-keyring.gpg >/dev/null
+                echo "deb [signed-by=/usr/share/keyrings/caddy-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee /etc/apt/sources.list.d/caddy.list
+                sudo apt update
+                sudo apt install -y caddy
+                ;;
+            centos|rhel)
+                sudo yum install -y yum-plugin-copr
+                sudo yum copr enable @caddy/caddy
+                sudo yum install -y caddy
+                ;;
+            fedora)
+                sudo dnf install -y 'dnf-command(copr)'
+                sudo dnf copr enable @caddy/caddy
+                sudo dnf install -y caddy
+                ;;
+            alpine)
+                CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
+                wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+                tar -xzf /tmp/caddy.tar.gz -C /tmp
+                sudo mv /tmp/caddy /usr/bin/caddy
+                sudo chmod +x /usr/bin/caddy
+                ;;
+            *)
+                error "暂不支持的系统"
+                exit 1
+                ;;
+        esac
     fi
 
-    info "✅ Caddy 安装完成"
+    info "Caddy 安装完成"
 
-    # -------------------
-    # 准备目录
-    # -------------------
+    # --------- 准备目录 ---------
     sudo mkdir -p /etc/caddy /etc/ssl/caddy
     sudo chown -R www-data:root /etc/ssl/caddy
     sudo chmod 0770 /etc/ssl/caddy
 
-    # -------------------
-    # 生成 Caddyfile
-    # -------------------
-    CADDYFILE=$(cat <<EOF
-${DOMAIN} {
+    # --------- 生成 Caddyfile ---------
+    CADDYFILE="${DOMAIN} {
     encode gzip
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Port {server_port}
-    }
-EOF
-)
+    }"
 
-    # TLS 配置
     if [[ -n "$CF_TOKEN" ]]; then
-        info "使用 DNS-01 验证 (Cloudflare Token)"
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
     tls {
@@ -286,19 +254,12 @@ EOF
     }"
     else
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
-            info "80/443 可用，使用 HTTP-01"
             CADDYFILE+="
-    tls ${EMAIL} {
-        storage file_system /etc/ssl/caddy
-    }"
+    tls ${EMAIL} { storage file_system /etc/ssl/caddy }"
         elif [[ $HTTP_FREE -eq 1 ]]; then
-            info "仅 80 可用，使用 HTTP-01"
             CADDYFILE+="
-    tls ${EMAIL} {
-        storage file_system /etc/ssl/caddy
-    }"
+    tls ${EMAIL} { storage file_system /etc/ssl/caddy }"
         elif [[ $HTTPS_FREE -eq 1 ]]; then
-            info "仅 443 可用，使用 TLS-ALPN-01"
             CADDYFILE+="
     tls ${EMAIL} {
         storage file_system /etc/ssl/caddy
@@ -311,14 +272,11 @@ EOF
     fi
 
     CADDYFILE+="
-}
-"
+}"
 
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile > /dev/null
 
-    # -------------------
-    # systemd 服务
-    # -------------------
+    # --------- systemd 服务 ---------
     sudo tee /etc/systemd/system/caddy.service > /dev/null <<-'EOF'
 [Unit]
 Description=Caddy Web Server
