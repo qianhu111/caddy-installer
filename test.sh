@@ -16,6 +16,12 @@ warn()  { echo -e "${YELLOW}[WARN]${RESET} $*"; }
 error() { echo -e "${RED}[ERROR]${RESET} $*"; }
 
 # ========================================
+# 分割线统一定义
+# ========================================
+LINE="========================================"
+LINE_SHORT="--------------------"
+
+# ========================================
 # 系统识别
 # ========================================
 detect_os() {
@@ -174,45 +180,53 @@ install_caddy() {
     read -rp "请输入绑定的域名: " DOMAIN
     read -rp "请输入用于申请证书的邮箱: " EMAIL
     read -rp "请输入反向代理目标地址 (例如 127.0.0.1:8888): " UPSTREAM
-    read -rp "请输入 Cloudflare API Token (可留空使用 HTTP/DNS 验证): " CF_TOKEN
+    read -rp "请输入 Cloudflare API Token (可留空使用 HTTP 验证): " CF_TOKEN
     read -rp "是否使用 Let’s Encrypt 测试环境 (y/n，默认n): " TEST_MODE
 
     [[ -z "$DOMAIN" || -z "$EMAIL" || -z "$UPSTREAM" ]] && { error "输入不能为空"; exit 1; }
 
     # -------------------
-    # 系统识别 & 依赖安装
+    # 安装 Caddy (方式一)
     # -------------------
     if [[ -f /etc/debian_version ]]; then
         OS="Debian/Ubuntu"
+        info "检测到系统: $OS"
         sudo apt update
-        sudo apt install -y curl wget tar ca-certificates gnupg lsb-release
+        sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy.gpg >/dev/null
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy.list
+        sudo apt update
+        sudo apt install -y caddy
     elif [[ -f /etc/redhat-release ]]; then
         if grep -qi "centos" /etc/redhat-release; then
             OS="CentOS"
         else
             OS="RHEL"
         fi
-        sudo yum install -y curl wget tar ca-certificates gnupg
+        info "检测到系统: $OS"
+        sudo yum install -y yum-plugin-copr
+        sudo yum copr enable @caddy/caddy
+        sudo yum install -y caddy
     elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
         OS="Fedora"
-        sudo dnf install -y curl wget tar ca-certificates gnupg
+        info "检测到系统: Fedora"
+        sudo dnf install -y 'dnf-command(copr)'
+        sudo dnf copr enable @caddy/caddy
+        sudo dnf install -y caddy
     elif grep -qi "alpine" /etc/os-release 2>/dev/null; then
         OS="Alpine"
-        sudo apk add --no-cache curl wget tar ca-certificates bash
+        info "检测到系统: Alpine"
+        # Alpine 官方源 caddy 无 cloudflare 插件 → 用二进制安装
+        CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
+        wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+        tar -xzf /tmp/caddy.tar.gz -C /tmp
+        sudo mv /tmp/caddy /usr/local/bin/caddy
+        sudo chmod +x /usr/local/bin/caddy
     else
         error "暂不支持的系统"
         exit 1
     fi
-    info "检测到系统: $OS"
-
-    # -------------------
-    # 安装 Caddy (xcaddy 构建)
-    # -------------------
-    info "安装 Caddy 并启用 Cloudflare 插件..."
-    sudo xcaddy build --with github.com/caddy-dns/cloudflare
-    sudo mv caddy /usr/local/bin/caddy
-    sudo chmod +x /usr/local/bin/caddy
-    info "带 Cloudflare 插件的 Caddy 安装完成"
+    info "Caddy 安装完成"
 
     # -------------------
     # 准备目录
@@ -272,7 +286,6 @@ EOF
         fi
     fi
 
-    # 关闭块
     CADDYFILE+="
 }
 "
@@ -280,7 +293,7 @@ EOF
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile > /dev/null
 
     # -------------------
-    # 写入 systemd 服务
+    # systemd 服务
     # -------------------
     sudo tee /etc/systemd/system/caddy.service > /dev/null <<-'EOF'
 [Unit]
@@ -288,8 +301,8 @@ Description=Caddy Web Server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
 User=www-data
 Group=www-data
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -300,27 +313,18 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
-    # -------------------
-    # 启动并检查证书
-    # -------------------
     sudo systemctl daemon-reload
     sudo systemctl enable caddy
     sudo systemctl restart caddy
 
     info "等待证书生成..."
     sleep 5
-
     CERT_FILES=$(find /etc/ssl/caddy -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
-
     if [[ -n "$CERT_FILES" ]]; then
-        success "证书申请成功!"
-        echo "证书文件如下："
+        info "✅ 证书申请成功!"
         echo "$CERT_FILES"
     else
-        warn "未检测到证书，请检查："
-        warn "1. 域名解析是否正确"
-        warn "2. 80/443 端口是否开放"
-        warn "3. Cloudflare Token 权限是否足够 (需要 Zone.DNS.Edit)"
+        warn "未检测到证书，请检查 DNS/端口/CF Token"
     fi
 }
 
@@ -328,64 +332,89 @@ EOF
 # Caddy 服务管理
 # ========================================
 manage_caddy() {
-    echo -e "\n${BLUE}========================================${RESET}"
-    echo "              Caddy 服务管理             "
-    echo -e "${BLUE}========================================${RESET}"
-    echo "1) 启动 Caddy"
-    echo "2) 停止 Caddy"
-    echo "3) 重启 Caddy"
-    echo "4) 查看实时日志"
-    echo "5) 查看证书文件"
-    read -rp "请选择操作: " choice
-    case $choice in
-        1)
-            sudo systemctl start caddy
-            info "Caddy 已启动"
-            ;;
-        2)
-            sudo systemctl stop caddy
-            info "Caddy 已停止"
-            ;;
-        3)
-            sudo systemctl restart caddy
-            info "Caddy 已重启"
-            ;;
-        4)
-            sudo journalctl -u caddy -f
-            ;;
-        5)
-            read -rp "请输入域名: " dom
-            CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates"
-            if [ -d "$CERT_DIR" ]; then
-                find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
-            else
-                warn "证书目录不存在: $CERT_DIR"
-            fi
-            ;;
-        *)
-            warn "无效选择"
-            ;;
-    esac
+    local LINE="========================================"
+
+    while true; do
+        echo -e "\n${BLUE}${LINE}${RESET}"
+        echo -e "${PURPLE}            Caddy 服务管理            ${RESET}"
+        echo -e "${BLUE}${LINE}${RESET}"
+        echo -e "${YELLOW}1)${RESET} 启动 Caddy"
+        echo -e "${YELLOW}2)${RESET} 停止 Caddy"
+        echo -e "${YELLOW}3)${RESET} 重启 Caddy"
+        echo -e "${YELLOW}4)${RESET} 查看实时日志"
+        echo -e "${YELLOW}5)${RESET} 查看证书文件"
+        echo -e "${YELLOW}6)${RESET} 返回主菜单"
+        read -rp "请选择操作: " choice
+
+        case $choice in
+            1)
+                sudo systemctl start caddy
+                info "✅ Caddy 已启动"
+                ;;
+            2)
+                sudo systemctl stop caddy
+                info "✅ Caddy 已停止"
+                ;;
+            3)
+                sudo systemctl restart caddy
+                info "✅ Caddy 已重启"
+                ;;
+            4)
+                info "按 Ctrl+C 退出日志"
+                sudo journalctl -u caddy -f
+                ;;
+            5)
+                read -rp "请输入域名: " dom
+                CERT_DIR="/etc/ssl/caddy"
+                if [ -d "$CERT_DIR" ]; then
+                    echo "证书文件列表:"
+                    find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
+                else
+                    warn "证书目录不存在: $CERT_DIR"
+                fi
+                ;;
+            6)
+                info "返回主菜单"
+                break
+                ;;
+            *)
+                warn "⚠️ 选择无效，请输入 1-6"
+                ;;
+        esac
+    done
 }
+
 
 # ========================================
 # 卸载 Caddy
 # ========================================
 uninstall_caddy() {
-    echo -e "\n${BLUE}========================================${RESET}"
+    local LINE="========================================"
+    echo -e "\n${BLUE}${LINE}${RESET}"
     echo "            卸载 Caddy 并清理           "
-    echo -e "${BLUE}========================================${RESET}"
+    echo -e "${BLUE}${LINE}${RESET}"
     read -rp "确认卸载 Caddy 吗？(y/n): " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || return
 
     sudo systemctl stop caddy || true
     sudo systemctl disable caddy || true
     sudo rm -f /etc/systemd/system/caddy.service
-    sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy
-    sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
-    sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    sudo apt remove --purge -y caddy || true
     sudo systemctl daemon-reload
+
+    if [[ -f /etc/debian_version ]]; then
+        sudo apt purge -y caddy || true
+        sudo rm -f /etc/apt/sources.list.d/caddy.list
+        sudo rm -f /usr/share/keyrings/caddy.gpg
+    elif [[ -f /etc/redhat-release ]]; then
+        sudo yum remove -y caddy || true
+    elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
+        sudo dnf remove -y caddy || true
+    else
+        # Alpine / 二进制安装
+        sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
+    fi
+
+    sudo rm -rf /etc/caddy /etc/ssl/caddy
     info "Caddy 已彻底卸载"
 }
 
@@ -393,10 +422,12 @@ uninstall_caddy() {
 # 主菜单
 # ========================================
 main_menu() {
+    local LINE="========================================"
+
     while true; do
-        echo -e "\n${BLUE}========================================${RESET}"
+        echo -e "\n${BLUE}${LINE}${RESET}"
         echo -e "      Caddy 一键管理脚本 ${PURPLE}by 千狐${RESET}       "
-        echo -e "${BLUE}========================================${RESET}"
+        echo -e "${BLUE}${LINE}${RESET}"
         echo "1) 安装并配置 Caddy"
         echo "2) 检查 Caddy 状态"
         echo "3) 管理 Caddy 服务"
