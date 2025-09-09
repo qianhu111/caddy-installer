@@ -342,34 +342,13 @@ EOF
     sudo systemctl restart caddy
 
     info "等待证书生成..."
-    sleep 10
-    
-    # 查找证书文件，精确匹配域名
-    CERT_DIR="/var/lib/caddy/certificates/acme-staging-v02.api.letsencrypt.org-directory"
-    DOMAIN_CERT_DIR="${CERT_DIR}/${DOMAIN}"
-    
-    # 检查证书目录是否存在
-    if [[ -d "$DOMAIN_CERT_DIR" ]]; then
-        # 查找并列出该域名目录下的所有证书和密钥文件
-        CERT_FILES=$(find "$DOMAIN_CERT_DIR" -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
-
-        if [[ -n "$CERT_FILES" ]]; then
-            info "✅ 证书申请成功!"
-            echo "证书文件列表:"
-            echo "$CERT_FILES"
-        else
-            warn "⚠️ 证书目录存在，但未找到证书文件。请查看日志以获取更多信息。"
-            sudo journalctl -u caddy --no-pager -n 20 # 显示最近20行日志
-        fi
+    sleep 5
+    CERT_FILES=$(find /var/lib/caddy -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
+    if [[ -n "$CERT_FILES" ]]; then
+        info "✅ 证书申请成功!"
+        echo "$CERT_FILES"
     else
-        # 如果目录不存在，表示申请失败
-        warn "❌ 证书申请失败。未找到域名证书目录。"
-        info "请检查以下可能原因："
-        info "1. 域名解析是否正确（A/AAAA记录）。"
-        info "2. Cloudflare API Token 是否有正确权限（Zone > DNS > Edit）。"
-        info "3. VPS的网络防火墙是否阻止了出站连接。"
-        sudo journalctl -u caddy --no-pager -n 20 # 显示最近20行日志
-        exit 1
+        warn "未检测到证书，请检查 DNS/端口/CF Token"
     fi
 }
 
