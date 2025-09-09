@@ -404,7 +404,6 @@ uninstall_caddy() {
     elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
         sudo dnf remove -y caddy || true
     else
-        # Alpine / 二进制安装
         sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
     fi
 
