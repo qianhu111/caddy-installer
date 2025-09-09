@@ -39,7 +39,7 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
 
 ### 在线执行
 
-新版（支持IPv4/IPv6自动检测）
+新版（支持IPv4/IPv6自动检测，支持非80/443端口）
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/main.sh)
