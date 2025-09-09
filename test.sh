@@ -187,7 +187,7 @@ install_caddy() {
         info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
     
         # 使用官方下载 API，自动生成带 Cloudflare 插件的 Caddy
-        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=95604088870894"
+        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
         
         wget -O /usr/bin/caddy "$DOWNLOAD_URL"
@@ -206,8 +206,11 @@ install_caddy() {
             debian|ubuntu)
                 sudo apt update
                 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
-                curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo tee /usr/share/keyrings/caddy-archive-keyring.gpg >/dev/null
-                echo "deb [signed-by=/usr/share/keyrings/caddy-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee /etc/apt/sources.list.d/caddy.list
+                curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+                    | sudo gpg --dearmor -o /usr/share/keyrings/caddy-archive-keyring.gpg
+                echo "deb [signed-by=/usr/share/keyrings/caddy-archive-keyring.gpg] \
+                https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" \
+                | sudo tee /etc/apt/sources.list.d/caddy.list
                 sudo apt update
                 sudo apt install -y caddy
                 ;;
