@@ -260,10 +260,9 @@ install_caddy() {
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
 tls {
-    dns cloudflare {env.CF_API_TOKEN}
+    dns cloudflare {env.CF_API_TOKEN}"
         [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
-    ca https://acme-staging-v02.api.letsencrypt.org/directory"
-        CADDYFILE+="
+    ca https://acme-staging-v02.api.letsencrypt.org/directory
 }"
     else
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
