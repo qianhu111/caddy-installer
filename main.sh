@@ -70,13 +70,18 @@ get_public_ip() {
     local_ipv4=$(ip -4 a | grep -oP 'inet \K[\d.]+' | grep -Ev '^(127\.|169\.254\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)' | head -n1)
 
     if [[ -n "$local_ipv4" ]]; then
-        # 通过外部服务获取真实公网 IPv4
-        ipv4=$(curl -s4 --max-time 5 https://ifconfig.co 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
-        if [[ -z "$ipv4" ]]; then
-            ipv4="NAT IPv4（非公网）"
-        fi
+        ipv4="$local_ipv4"
+        info "检测到本机 IPv4: ${GREEN}${ipv4}${RESET}"
     else
-        ipv4="无 IPv4"
+        info "未检测到本机 IPv4，使用外部服务获取公网 IPv4..."
+        for url in "https://ip.sb" "https://ifconfig.co" "https://api.ipify.org"; do
+            ipv4=$(curl -4 -s --max-time 5 "$url")
+            if [[ "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                info "外部服务返回 IPv4: ${GREEN}${ipv4}${RESET}"
+                break
+            fi
+        done
+        [[ -z "$ipv4" ]] && { ipv4="无 IPv4"; warn "未能获取公网 IPv4"; }
     fi
 
     # ---------- IPv6 ----------
@@ -84,18 +89,22 @@ get_public_ip() {
     local_ipv6=$(ip -6 a | grep -oP 'inet6 \K[^/]*' | grep -v '^fe80' | grep -v '^::1$' | head -n1)
 
     if [[ -n "$local_ipv6" ]]; then
-        # 判断是否为公网 IPv6（2000::/3 为全球单播地址）
-        if [[ "$local_ipv6" =~ ^2[0-9a-fA-F]{0,3}: ]]; then
-            ipv6="$local_ipv6"
-        else
-            ipv6="无公网 IPv6"
-        fi
+        ipv6="$local_ipv6"
+        info "检测到本机 IPv6: ${GREEN}${ipv6}${RESET}"
     else
-        ipv6="无 IPv6"
+        info "未检测到本机 IPv6，使用外部服务获取公网 IPv6..."
+        for url in "https://ip.sb" "https://ifconfig.co"; do
+            ipv6=$(curl -6 -s --max-time 5 "$url")
+            if [[ "$ipv6" =~ ^[0-9a-fA-F:]+$ ]]; then
+                info "外部服务返回 IPv6: ${GREEN}${ipv6}${RESET}"
+                break
+            fi
+        done
+        [[ -z "$ipv6" ]] && { ipv6="无 IPv6"; warn "未能获取公网 IPv6"; }
     fi
 
-    info "服务器 IPv4: ${GREEN}${ipv4}${RESET}"
-    info "服务器 IPv6: ${GREEN}${ipv6}${RESET}"
+    info "服务器公网 IPv4: ${GREEN}${ipv4}${RESET}"
+    info "服务器公网 IPv6: ${GREEN}${ipv6}${RESET}"
 }
 
 # ========================================
@@ -181,26 +190,81 @@ install_caddy() {
     # 安装 Caddy 官方 apt 源
     # -------------------
     info "安装最新版 Caddy..."
-    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg || true
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-    sudo apt update
-    sudo apt install -y caddy || { error "Caddy 安装失败"; exit 1; }
+    if [[ -n "$CF_TOKEN" ]]; then
+        info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
+    
+        # 使用官方下载 API，自动生成带 Cloudflare 插件的 Caddy
+        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=95604088870894"
+        info "下载 Caddy 二进制: $DOWNLOAD_URL"
+        
+        wget -O /tmp/caddy "$DOWNLOAD_URL"
+        sudo mv /tmp/caddy /usr/bin/caddy
+        sudo chmod +x /usr/bin/caddy
+    
+        # 检查是否安装成功
+        if /usr/bin/caddy list-modules | grep -q 'cloudflare'; then
+            info "✅ Caddy 安装完成，Cloudflare 插件已集成"
+        else
+            error "❌ Caddy 安装失败，未集成 Cloudflare 插件"
+            exit 1
+        fi
+    else
+        info "未检测到 Cloudflare Token，使用系统包安装 Caddy"
+        case "$OS" in
+            debian|ubuntu)
+                sudo apt update
+                sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+                curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+                    | sudo gpg --dearmor -o /usr/share/keyrings/caddy-archive-keyring.gpg
+                echo "deb [signed-by=/usr/share/keyrings/caddy-archive-keyring.gpg] \
+                https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" \
+                | sudo tee /etc/apt/sources.list.d/caddy.list
+                sudo apt update
+                sudo apt install -y caddy
+                ;;
+            centos|rhel)
+                sudo yum install -y yum-plugin-copr
+                sudo yum copr enable @caddy/caddy
+                sudo yum install -y caddy
+                ;;
+            fedora)
+                sudo dnf install -y 'dnf-command(copr)'
+                sudo dnf copr enable @caddy/caddy
+                sudo dnf install -y caddy
+                ;;
+            alpine)
+                CADDY_VER=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep tag_name | cut -d '"' -f4)
+                wget -O /tmp/caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/${CADDY_VER}/caddy_${CADDY_VER#v}_linux_amd64.tar.gz"
+                tar -xzf /tmp/caddy.tar.gz -C /tmp
+                sudo mv /tmp/caddy /usr/bin/caddy
+                sudo chmod +x /usr/bin/caddy
+                ;;
+            *)
+                error "暂不支持的系统"
+                exit 1
+                ;;
+        esac
+    fi
 
-    sudo mkdir -p /etc/caddy /etc/ssl/caddy
-    sudo chown -R root:www-data /etc/caddy
-    sudo chown -R www-data:root /etc/ssl/caddy
-    sudo chmod 0770 /etc/ssl/caddy
+    info "Caddy 安装完成"
+
+    sudo mkdir -p /etc/caddy /var/lib/caddy
+    sudo chown -R www-data:www-data /var/lib/caddy /etc/caddy
+    sudo chmod 750 /var/lib/caddy /etc/caddy
 
     # -------------------
     # 生成 Caddyfile
     # -------------------
-    CADDYFILE="${DOMAIN} {
-    encode gzip
-    reverse_proxy ${UPSTREAM} {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Port {server_port}
-    }"
+    CADDYFILE="{
+        storage file_system /var/lib/caddy
+    }
+
+    ${DOMAIN} {
+        encode gzip
+        reverse_proxy ${UPSTREAM} {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Port {server_port}
+        }"
 
     # -------------------
     # 证书申请逻辑
@@ -253,7 +317,31 @@ install_caddy() {
 
     # 写入 Caddyfile 并验证
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
+
+    sudo tee /etc/systemd/system/caddy.service > /dev/null <<EOF
+[Unit]
+Description=Caddy Web Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
+User=www-data
+Group=www-data
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=CADDY_DATA_DIR=/var/lib/caddy
+Environment=CADDY_CONFIG_DIR=/etc/caddy
+Environment=CADDY_STORAGE_DIR=/var/lib/caddy
+Environment=CF_API_TOKEN=${CF_TOKEN}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo rm -f /etc/systemd/system/caddy.service.d/override.conf
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
+    sudo systemctl daemon-reload
     sudo systemctl enable caddy
     sudo systemctl restart caddy
     info "Caddy 已启动并设置开机自启"
@@ -269,14 +357,14 @@ install_caddy() {
     fi
 
     info "等待证书生成..."
-    for i in {1..20}; do
-        if [ -d "$CERT_DIR" ] && [ "$(ls -A "$CERT_DIR" 2>/dev/null)" ]; then
-            info "证书已生成！路径如下："
-            find "$CERT_DIR" -type f \( -name "*.crt" -o -name "*.key" \)
-            break
-        fi
-        sleep 5
-    done
+    sleep 10
+    CERT_FILES=$(find /var/lib/caddy -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \) 2>/dev/null)
+    if [[ -n "$CERT_FILES" ]]; then
+        info "✅ 证书申请成功!"
+        echo "$CERT_FILES"
+    else
+        warn "未检测到证书，请检查 DNS/端口/CF Token"
+    fi
 }
 
 # ========================================
@@ -286,26 +374,28 @@ manage_caddy() {
     echo -e "\n${BLUE}========================================${RESET}"
     echo "              Caddy 服务管理             "
     echo -e "${BLUE}========================================${RESET}"
-    echo "1) 启动 Caddy"
-    echo "2) 停止 Caddy"
-    echo "3) 重启 Caddy"
-    echo "4) 查看实时日志"
-    echo "5) 查看证书文件"
+    echo -e "${YELLOW}1)${RESET} 启动 Caddy"
+    echo -e "${YELLOW}2)${RESET} 停止 Caddy"
+    echo -e "${YELLOW}3)${RESET} 重启 Caddy"
+    echo -e "${YELLOW}4)${RESET} 查看实时日志"
+    echo -e "${YELLOW}5)${RESET} 查看证书文件"
+    echo -e "${YELLOW}6)${RESET} 返回主菜单"
     read -rp "请选择操作: " choice
     case $choice in
         1)
             sudo systemctl start caddy
-            info "Caddy 已启动"
+            info "✅ Caddy 已启动"
             ;;
         2)
             sudo systemctl stop caddy
-            info "Caddy 已停止"
+            info "✅ Caddy 已停止"
             ;;
         3)
             sudo systemctl restart caddy
-            info "Caddy 已重启"
+            info "✅ Caddy 已重启"
             ;;
         4)
+            info "按 Ctrl+C 退出日志"
             sudo journalctl -u caddy -f
             ;;
         5)
@@ -317,8 +407,12 @@ manage_caddy() {
                 warn "证书目录不存在: $CERT_DIR"
             fi
             ;;
+        6)
+            info "返回主菜单"
+            break
+            ;;
         *)
-            warn "无效选择"
+            warn "⚠️ 选择无效，请输入 1-6"
             ;;
     esac
 }
@@ -336,11 +430,28 @@ uninstall_caddy() {
     sudo systemctl stop caddy || true
     sudo systemctl disable caddy || true
     sudo rm -f /etc/systemd/system/caddy.service
-    sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
-    sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    sudo apt remove --purge -y caddy || true
     sudo systemctl daemon-reload
-    info "Caddy 已彻底卸载"
+
+    if [[ -f /etc/debian_version ]]; then
+        sudo apt purge -y caddy || true
+        sudo rm -f /etc/apt/sources.list.d/caddy.list
+        sudo rm -f /usr/share/keyrings/caddy*.gpg
+    elif [[ -f /etc/redhat-release ]]; then
+        sudo yum remove -y caddy || true
+    elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
+        sudo dnf remove -y caddy || true
+    else
+        sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
+    fi
+
+    info "正在清理 Caddy 的数据和 systemd 配置..."
+    sudo rm -rf /etc/caddy /var/lib/caddy
+    sudo rm -rf /etc/systemd/system/caddy.service /etc/systemd/system/caddy.service.d
+    sudo rm -rf /var/www/.config/caddy /var/www/.local/share/caddy
+
+    sudo rm -rf ~/.config/caddy
+
+    info "✅ Caddy 已彻底卸载!"
 }
 
 # ========================================
@@ -351,11 +462,11 @@ main_menu() {
         echo -e "\n${BLUE}========================================${RESET}"
         echo -e "      Caddy 一键管理脚本 ${PURPLE}by 千狐${RESET}       "
         echo -e "${BLUE}========================================${RESET}"
-        echo "1) 安装并配置 Caddy"
-        echo "2) 检查 Caddy 状态"
-        echo "3) 管理 Caddy 服务"
-        echo "4) 卸载 Caddy"
-        echo "5) 退出"
+        echo -e "${YELLOW}1)${RESET} 安装并配置 Caddy"
+        echo -e "${YELLOW}2)${RESET} 检查 Caddy 状态"
+        echo -e "${YELLOW}3)${RESET} 管理 Caddy 服务"
+        echo -e "${YELLOW}4)${RESET} 卸载 Caddy"
+        echo -e "${YELLOW}5)${RESET} 退出"
         read -rp "请选择操作: " choice
         case $choice in
             1)
