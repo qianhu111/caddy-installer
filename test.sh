@@ -242,9 +242,9 @@ install_caddy() {
     info "Caddy 安装完成"
 
     # --------- 准备目录 ---------
-    sudo mkdir -p /etc/caddy /etc/ssl/caddy
-    sudo chown -R www-data:www-data /etc/ssl/caddy /etc/caddy
-    sudo chmod 750 /etc/ssl/caddy /etc/caddy
+    sudo mkdir -p /etc/caddy /var/lib/caddy
+    sudo chown -R www-data:www-data /var/lib/caddy /etc/caddy
+    sudo chmod 750 /var/lib/caddy /etc/caddy
 
     # --------- 生成 Caddyfile ---------
     CADDYFILE="${DOMAIN} {
@@ -322,7 +322,7 @@ ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
 User=www-data
 Group=www-data
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-Environment=CADDY_DATA_DIR=/etc/ssl/caddy
+Environment=CADDY_DATA_DIR=/var/lib/caddy
 Environment=CADDY_STORAGE_DIR=/etc/caddy
 Environment=CF_API_TOKEN=${CF_TOKEN}
 Restart=on-failure
@@ -337,7 +337,7 @@ EOF
 
     info "等待证书生成..."
     sleep 5
-    CERT_FILES=$(find /etc/ssl/caddy -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
+    CERT_FILES=$(find /var/lib/caddy -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
     if [[ -n "$CERT_FILES" ]]; then
         info "✅ 证书申请成功!"
         echo "$CERT_FILES"
@@ -383,7 +383,7 @@ manage_caddy() {
                 ;;
             5)
                 read -rp "请输入域名: " dom
-                CERT_DIR="/etc/ssl/caddy"
+                CERT_DIR="/var/lib/caddy"
                 if [ -d "$CERT_DIR" ]; then
                     echo "证书文件列表:"
                     find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
@@ -431,7 +431,7 @@ uninstall_caddy() {
         sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
     fi
 
-    sudo rm -rf /etc/caddy /etc/ssl/caddy
+    sudo rm -rf /etc/caddy /var/lib/caddy
     info "Caddy 已彻底卸载"
 }
 
