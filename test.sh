@@ -247,12 +247,16 @@ install_caddy() {
     sudo chmod 750 /var/lib/caddy /etc/caddy
 
     # --------- 生成 Caddyfile ---------
-    CADDYFILE="${DOMAIN} {
-    encode gzip
-    reverse_proxy ${UPSTREAM} {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Port {server_port}
-    }"
+    CADDYFILE="{
+        storage file_system /var/lib/caddy
+    }
+
+    ${DOMAIN} {
+        encode gzip
+        reverse_proxy ${UPSTREAM} {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Port {server_port}
+        }"
 
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
@@ -332,6 +336,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
+    sudo rm -f /etc/systemd/system/caddy.service.d/override.conf
     sudo systemctl daemon-reload
     sudo systemctl enable caddy
     sudo systemctl restart caddy
@@ -432,9 +437,14 @@ uninstall_caddy() {
         sudo rm -f /usr/local/bin/caddy /usr/bin/caddy
     fi
 
+    info "正在清理 Caddy 的数据和 systemd 配置..."
     sudo rm -rf /etc/caddy /var/lib/caddy
-    sudo rm -rf /etc/systemd/system/caddy.service.d/override.conf
-    info "Caddy 已彻底卸载"
+    sudo rm -rf /etc/systemd/system/caddy.service /etc/systemd/system/caddy.service.d
+    sudo rm -rf /var/www/.config/caddy /var/www/.local/share/caddy
+
+    sudo rm -rf ~/.config/caddy
+
+    info "✅ Caddy 已彻底卸载!"
 }
 
 # ========================================
