@@ -323,6 +323,7 @@ User=www-data
 Group=www-data
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Environment=CADDY_STORAGE_DIR=/etc/ssl/caddy
+Environment=CF_API_TOKEN=${CF_TOKEN}
 Restart=on-failure
 
 [Install]
