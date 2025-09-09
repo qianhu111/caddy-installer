@@ -271,7 +271,7 @@ install_caddy() {
     # -------------------
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
-        export CF_API_TOKEN="$CF_TOKEN"
+        # export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
     tls {
         dns cloudflare {env.CF_API_TOKEN}"
@@ -356,8 +356,8 @@ EOF
         CERT_DIR="${CERT_BASE}/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/"
     fi
 
-    info "等待证书生成..."
-    sleep 10
+    info "请等待1分钟证书生成..."
+    sleep 60
     CERT_FILES=$(find /var/lib/caddy -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \) 2>/dev/null)
     if [[ -n "$CERT_FILES" ]]; then
         info "✅ 证书申请成功!"
