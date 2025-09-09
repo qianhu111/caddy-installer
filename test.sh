@@ -317,20 +317,14 @@ Description=Caddy Web Server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/caddy run \
-  --config /etc/caddy/Caddyfile \
-  --adapter caddyfile \
-  --environ \
-  --watch \
-  --data-dir /var/lib/caddy \
-  --config-dir /etc/caddy
-ExecReload=/usr/bin/caddy reload \
-  --config /etc/caddy/Caddyfile \
-  --data-dir /var/lib/caddy \
-  --config-dir /etc/caddy
+ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
 User=www-data
 Group=www-data
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=CADDY_DATA_DIR=/var/lib/caddy
+Environment=CADDY_CONFIG_DIR=/etc/caddy
+Environment=CADDY_STORAGE_DIR=/var/lib/caddy
 Environment=CF_API_TOKEN=${CF_TOKEN}
 Restart=on-failure
 
@@ -439,6 +433,7 @@ uninstall_caddy() {
     fi
 
     sudo rm -rf /etc/caddy /var/lib/caddy
+    sudo rm -rf /etc/systemd/system/caddy.service.d/override.conf
     info "Caddy 已彻底卸载"
 }
 
