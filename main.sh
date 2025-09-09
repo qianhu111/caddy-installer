@@ -275,54 +275,36 @@ install_caddy() {
         CADDYFILE+="
     tls {
         dns cloudflare {env.CF_API_TOKEN}"
-        # 使用标准的 if/fi 结构，更清晰
-        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-            CADDYFILE+="
+        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
         ca https://acme-staging-v02.api.letsencrypt.org/directory"
-        fi
         CADDYFILE+="
     }"
     else
         # 未提供 Cloudflare Token，优先 HTTP-01 / TLS-ALPN-01
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
             info "80/443 均可用，使用 HTTP-01 验证 (推荐)"
-            # 使用 if/fi 结构代替 ||
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
     tls {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
+    }" || CADDYFILE+="
     tls ${EMAIL}"
-            fi
         elif [[ $HTTP_FREE -eq 1 ]]; then
             info "仅 80 端口可用，使用 HTTP-01"
-            # 使用 if/fi 结构代替 ||
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
     tls {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
+    }" || CADDYFILE+="
     tls ${EMAIL}"
-            fi
         elif [[ $HTTPS_FREE -eq 1 ]]; then
             info "仅 443 端口可用，使用 TLS-ALPN-01"
-            # 使用 if/fi 结构代替 ||
-            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
-                CADDYFILE+="
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
     tls {
         alpn tls-alpn-01
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }"
-            else
-                CADDYFILE+="
+    }" || CADDYFILE+="
     tls ${EMAIL} {
         alpn tls-alpn-01
     }"
-            fi
         else
             error "80/443 端口均被占用，无法申请证书"
             error "请提供 Cloudflare Token 使用 DNS-01 方式"
@@ -336,7 +318,7 @@ install_caddy() {
     # 写入 Caddyfile 并验证
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile >/dev/null
 
-    sudo tee /etc/systemd/system/caddy.service > /dev/null <<EOF
+    SERVICE_FILE_CONTENT=$(cat <<EOF
 [Unit]
 Description=Caddy Web Server
 After=network.target
@@ -350,12 +332,14 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 Environment=CADDY_DATA_DIR=/var/lib/caddy
 Environment=CADDY_CONFIG_DIR=/etc/caddy
 Environment=CADDY_STORAGE_DIR=/var/lib/caddy
-Environment=CF_API_TOKEN=${CF_TOKEN}
 Restart=on-failure
+$( [[ -n "$CF_TOKEN" ]] && echo "Environment=CF_API_TOKEN=${CF_TOKEN}" )
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    )
+    echo "$SERVICE_FILE_CONTENT" | sudo tee /etc/systemd/system/caddy.service > /dev/null
 
     sudo rm -f /etc/systemd/system/caddy.service.d/override.conf
     sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
