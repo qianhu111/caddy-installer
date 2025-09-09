@@ -342,8 +342,8 @@ EOF
     sudo systemctl restart caddy
 
     info "等待证书生成..."
-    sleep 5
-    CERT_FILES=$(find /var/lib/caddy -type f \( -name "*.crt" -o -name "*.key" \) 2>/dev/null)
+    sleep 10
+    CERT_FILES=$(find /var/lib/caddy -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \) 2>/dev/null)
     if [[ -n "$CERT_FILES" ]]; then
         info "✅ 证书申请成功!"
         echo "$CERT_FILES"
@@ -392,7 +392,7 @@ manage_caddy() {
                 CERT_DIR="/var/lib/caddy"
                 if [ -d "$CERT_DIR" ]; then
                     echo "证书文件列表:"
-                    find "$CERT_DIR" -type f \( -name "*.crt" -o -name "*.key" \)
+                    find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
                 else
                     warn "证书目录不存在: $CERT_DIR"
                 fi
