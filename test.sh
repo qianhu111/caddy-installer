@@ -311,7 +311,7 @@ install_caddy() {
     echo "$CADDYFILE"
 
     # --------- systemd 服务 ---------
-    sudo tee /etc/systemd/system/caddy.service > /dev/null <<-'EOF'
+    sudo tee /etc/systemd/system/caddy.service > /dev/null <<EOF
 [Unit]
 Description=Caddy Web Server
 After=network.target
