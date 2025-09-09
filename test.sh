@@ -187,11 +187,12 @@ install_caddy() {
         info "检测到 Cloudflare Token，安装带 Cloudflare 插件的 Caddy"
     
         # 使用官方下载 API，自动生成带 Cloudflare 插件的 Caddy
-        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
+        DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=95604088870894"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
         
-        wget -O /usr/bin/caddy "$DOWNLOAD_URL"
-        sudo chmod +x /usr/bin/caddy
+        wget -O /tmp/caddy.tar.gz "$DOWNLOAD_URL"
+        tar -xzf /tmp/caddy.tar.gz -C /tmp
+        sudo mv /tmp/caddy /usr/bin/caddy
     
         # 检查是否安装成功
         if /usr/bin/caddy version | grep -q 'cloudflare'; then
@@ -397,7 +398,7 @@ uninstall_caddy() {
     if [[ -f /etc/debian_version ]]; then
         sudo apt purge -y caddy || true
         sudo rm -f /etc/apt/sources.list.d/caddy.list
-        sudo rm -f /usr/share/keyrings/caddy.gpg
+        sudo rm -f /usr/share/keyrings/caddy*.gpg
     elif [[ -f /etc/redhat-release ]]; then
         sudo yum remove -y caddy || true
     elif grep -qi "fedora" /etc/os-release 2>/dev/null; then
