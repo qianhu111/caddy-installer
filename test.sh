@@ -252,9 +252,7 @@ install_caddy() {
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Port {server_port}
-    }
-    storage file_system /etc/ssl/caddy
-"
+    }"
 
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
