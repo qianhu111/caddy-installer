@@ -401,8 +401,9 @@ manage_caddy() {
             ;;
         5)
             read -rp "请输入域名: " dom
-            CERT_DIR="/var/lib/caddy/.local/share/caddy/certificates"
+            CERT_DIR="/var/lib/caddy"
             if [ -d "$CERT_DIR" ]; then
+                echo "证书文件列表:"
                 find "$CERT_DIR" -type f \( -name "${dom}*.crt" -o -name "${dom}*.key" \)
             else
                 warn "证书目录不存在: $CERT_DIR"
