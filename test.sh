@@ -190,9 +190,9 @@ install_caddy() {
         DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=95604088870894"
         info "下载 Caddy 二进制: $DOWNLOAD_URL"
         
-        wget -O /tmp/caddy.tar.gz "$DOWNLOAD_URL"
-        tar -xzf /tmp/caddy.tar.gz -C /tmp
+        wget -O /tmp/caddy "$DOWNLOAD_URL"
         sudo mv /tmp/caddy /usr/bin/caddy
+        sudo chmod +x /usr/bin/caddy
     
         # 检查是否安装成功
         if /usr/bin/caddy version | grep -q 'cloudflare'; then
