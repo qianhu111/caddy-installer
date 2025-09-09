@@ -284,6 +284,7 @@ install_caddy() {
     fi
 
     CADDYFILE+="
+        storage file_system /etc/ssl/caddy
 }"
 
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile > /dev/null
