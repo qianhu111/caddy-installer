@@ -341,9 +341,8 @@ EOF
     )
     echo "$SERVICE_FILE_CONTENT" | sudo tee /etc/systemd/system/caddy.service > /dev/null
 
-    sudo systemctl daemon-reload
     sudo rm -f /etc/systemd/system/caddy.service.d/override.conf
-    sudo caddy validate --config /etc/caddy/Caddyfile || { warn "Caddyfile 语法错误"; exit 1; }
+    sudo systemctl daemon-reload
     sudo systemctl enable caddy
     sudo systemctl restart caddy
     info "Caddy 已启动并设置开机自启"
