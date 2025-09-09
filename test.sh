@@ -428,11 +428,11 @@ main_menu() {
         echo -e "\n${BLUE}${LINE}${RESET}"
         echo -e "      Caddy 一键管理脚本 ${PURPLE}by 千狐${RESET}       "
         echo -e "${BLUE}${LINE}${RESET}"
-        echo "${YELLOW}1)${RESET} 安装并配置 Caddy"
-        echo "${YELLOW}2)${RESET} 检查 Caddy 状态"
-        echo "${YELLOW}3)${RESET} 管理 Caddy 服务"
-        echo "${YELLOW}4)${RESET} 卸载 Caddy"
-        echo "${YELLOW}5)${RESET} 退出"
+        echo -e "${YELLOW}1)${RESET} 安装并配置 Caddy"
+        echo -e "${YELLOW}2)${RESET} 检查 Caddy 状态"
+        echo -e "${YELLOW}3)${RESET} 管理 Caddy 服务"
+        echo -e "${YELLOW}4)${RESET} 卸载 Caddy"
+        echo -e "${YELLOW}5)${RESET} 退出"
         read -rp "请选择操作: " choice
         case $choice in
             1)
