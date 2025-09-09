@@ -195,7 +195,7 @@ install_caddy() {
         sudo chmod +x /usr/bin/caddy
     
         # 检查是否安装成功
-        if /usr/bin/caddy version | grep -q 'cloudflare'; then
+        if /usr/bin/caddy list-modules | grep -q 'cloudflare'; then
             info "✅ Caddy 安装完成，Cloudflare 插件已集成"
         else
             error "❌ Caddy 安装失败，未集成 Cloudflare 插件"
