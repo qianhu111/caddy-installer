@@ -252,40 +252,47 @@ install_caddy() {
     reverse_proxy ${UPSTREAM} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Port {server_port}
-    }"
+    }
+    storage file_system /etc/ssl/caddy
+}"
 
     if [[ -n "$CF_TOKEN" ]]; then
         export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
-    tls {
-        dns cloudflare {env.CF_API_TOKEN}
-        storage file_system /etc/ssl/caddy"
+tls {
+    dns cloudflare {env.CF_API_TOKEN}
         [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
-        ca https://acme-staging-v02.api.letsencrypt.org/directory"
+    ca https://acme-staging-v02.api.letsencrypt.org/directory"
         CADDYFILE+="
-    }"
+}"
     else
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
             CADDYFILE+="
-    tls ${EMAIL} { storage file_system /etc/ssl/caddy }"
+tls ${EMAIL}"
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+=" {
+    ca https://acme-staging-v02.api.letsencrypt.org/directory
+}"
         elif [[ $HTTP_FREE -eq 1 ]]; then
             CADDYFILE+="
-    tls ${EMAIL} { storage file_system /etc/ssl/caddy }"
+tls ${EMAIL}"
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+=" {
+    ca https://acme-staging-v02.api.letsencrypt.org/directory
+}"
         elif [[ $HTTPS_FREE -eq 1 ]]; then
             CADDYFILE+="
-    tls ${EMAIL} {
-        storage file_system /etc/ssl/caddy
-        alpn tls-alpn-01
-    }"
+tls ${EMAIL} {
+    alpn tls-alpn-01
+}"
+            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+tls {
+    alpn tls-alpn-01
+    ca https://acme-staging-v02.api.letsencrypt.org/directory
+}"
         else
-            error "80/443 均不可用，无法申请证书"
+            error "80/443 端口均被占用，无法申请证书"
             exit 1
         fi
     fi
-
-    CADDYFILE+="
-        storage file_system /etc/ssl/caddy
-}"
 
     echo "$CADDYFILE" | sudo tee /etc/caddy/Caddyfile > /dev/null
 
@@ -422,11 +429,11 @@ main_menu() {
         echo -e "\n${BLUE}${LINE}${RESET}"
         echo -e "      Caddy 一键管理脚本 ${PURPLE}by 千狐${RESET}       "
         echo -e "${BLUE}${LINE}${RESET}"
-        echo "1) 安装并配置 Caddy"
-        echo "2) 检查 Caddy 状态"
-        echo "3) 管理 Caddy 服务"
-        echo "4) 卸载 Caddy"
-        echo "5) 退出"
+        echo "${YELLOW}1)${RESET} 安装并配置 Caddy"
+        echo "${YELLOW}2)${RESET} 检查 Caddy 状态"
+        echo "${YELLOW}3)${RESET} 管理 Caddy 服务"
+        echo "${YELLOW}4)${RESET} 卸载 Caddy"
+        echo "${YELLOW}5)${RESET} 退出"
         read -rp "请选择操作: " choice
         case $choice in
             1)
