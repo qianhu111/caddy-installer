@@ -271,40 +271,58 @@ install_caddy() {
     # -------------------
     if [[ -n "$CF_TOKEN" ]]; then
         info "使用 DNS-01 验证 (Cloudflare Token)"
-        # export CF_API_TOKEN="$CF_TOKEN"
+        export CF_API_TOKEN="$CF_TOKEN"
         CADDYFILE+="
     tls {
         dns cloudflare {env.CF_API_TOKEN}"
-        [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+        # 使用标准的 if/fi 结构，更清晰
+        if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+            CADDYFILE+="
         ca https://acme-staging-v02.api.letsencrypt.org/directory"
+        fi
         CADDYFILE+="
     }"
     else
         # 未提供 Cloudflare Token，优先 HTTP-01 / TLS-ALPN-01
         if [[ $HTTP_FREE -eq 1 && $HTTPS_FREE -eq 1 ]]; then
             info "80/443 均可用，使用 HTTP-01 验证 (推荐)"
-            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+            # 使用 if/fi 结构代替 ||
+            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+                CADDYFILE+="
     tls {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }" || CADDYFILE+="
+    }"
+            else
+                CADDYFILE+="
     tls ${EMAIL}"
+            fi
         elif [[ $HTTP_FREE -eq 1 ]]; then
             info "仅 80 端口可用，使用 HTTP-01"
-            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+            # 使用 if/fi 结构代替 ||
+            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+                CADDYFILE+="
     tls {
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }" || CADDYFILE+="
+    }"
+            else
+                CADDYFILE+="
     tls ${EMAIL}"
+            fi
         elif [[ $HTTPS_FREE -eq 1 ]]; then
             info "仅 443 端口可用，使用 TLS-ALPN-01"
-            [[ "$TEST_MODE" =~ ^[Yy]$ ]] && CADDYFILE+="
+            # 使用 if/fi 结构代替 ||
+            if [[ "$TEST_MODE" =~ ^[Yy]$ ]]; then
+                CADDYFILE+="
     tls {
         alpn tls-alpn-01
         ca https://acme-staging-v02.api.letsencrypt.org/directory
-    }" || CADDYFILE+="
+    }"
+            else
+                CADDYFILE+="
     tls ${EMAIL} {
         alpn tls-alpn-01
     }"
+            fi
         else
             error "80/443 端口均被占用，无法申请证书"
             error "请提供 Cloudflare Token 使用 DNS-01 方式"
